@@ -1,9 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
-import JobForm from './JobForm';
+import { useAuth } from '../contexts/AuthContext';
+import JobForm from '../components/JobForm';
+import ApplicantDetail from '../components/ApplicantDetail';
+import AssessmentForm from '../components/AssessmentForm';
+import SchedulingForm from '../components/SchedulingForm';
+import { useNavigate } from 'react-router-dom';
+import JobFormPage from './JobFormPage';
 
 // Komponen untuk menampilkan daftar pelamar
-const ApplicantsList = ({ job, applicants, onBack, onDownloadFile }) => (
+const ApplicantsList = ({ job, applicants, onBack, onDownloadFile, onUpdateStatus, onSelectApplicant }) => (
   <div className="p-8">
     <button onClick={onBack} className="flex items-center text-gray-600 hover:text-gray-900 transition-colors duration-200">
       <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -21,21 +27,37 @@ const ApplicantsList = ({ job, applicants, onBack, onDownloadFile }) => (
                 <div>
                   <div className="font-semibold text-gray-800">{applicant.name}</div>
                   <div className="text-sm text-gray-500">{applicant.email}</div>
-                  <div className={`mt-2 text-sm font-bold ${applicant.status === 'Applied' ? 'text-blue-600' : applicant.status === 'Shortlisted' ? 'text-green-600' : 'text-red-600'}`}>
-                    Status: {applicant.status}
+                  <div className="mt-2 flex items-center space-x-2">
+                    <span className={`px-3 py-1 rounded-full text-sm font-semibold 
+                      ${applicant.status === 'Applied' ? 'bg-blue-100 text-blue-800' :
+                      applicant.status === 'Shortlisted' ? 'bg-green-100 text-green-800' :
+                      applicant.status === 'Scheduled for Interview' ? 'bg-yellow-100 text-yellow-800' :
+                      applicant.status === 'Interviewed' ? 'bg-indigo-100 text-indigo-800' :
+                      'bg-red-100 text-red-800'}`}
+                    >
+                      Status: {applicant.status}
+                    </span>
+                    <span className={`px-3 py-1 rounded-full text-sm font-semibold 
+                      ${applicant.auto_screening_status === 'Lolos' ? 'bg-green-200 text-green-800' :
+                      applicant.auto_screening_status === 'Tidak Lolos' ? 'bg-red-200 text-red-800' :
+                      'bg-gray-200 text-gray-800'}`}
+                    >
+                      Screening: {applicant.auto_screening_status}
+                    </span>
                   </div>
+                  {applicant.auto_screening_log && applicant.auto_screening_log['Tidak Lolos']?.length > 0 && (
+                    <div className="mt-2 text-xs text-red-500">
+                      <strong>Catatan:</strong> {applicant.auto_screening_log['Tidak Lolos'].map(log => log.reason).join(' | ')}
+                    </div>
+                  )}
                 </div>
                 <div>
-                  {/* Tombol untuk mengunduh file */}
-                  {applicant.uploaded_files && applicant.uploaded_files.map((file, index) => (
-                    <button
-                      key={index}
-                      onClick={() => onDownloadFile(file.split(': ')[1])}
-                      className="mt-2 text-sm text-teal-600 hover:underline"
-                    >
-                      Unduh {file.split(': ')[0]}
-                    </button>
-                  ))}
+                  <button
+                    onClick={() => onSelectApplicant(applicant)}
+                    className="text-sm text-blue-500 hover:text-blue-700 font-semibold"
+                  >
+                    Lihat Detail
+                  </button>
                 </div>
               </div>
             </li>
@@ -48,24 +70,25 @@ const ApplicantsList = ({ job, applicants, onBack, onDownloadFile }) => (
   </div>
 );
 
-export default function AdminDashboard({ userProfile }) {
+export default function AdminDashboard() {
+  const { userProfile } = useAuth();
   const [loading, setLoading] = useState(true);
   const [jobs, setJobs] = useState([]);
   const [applicants, setApplicants] = useState([]);
-  const [showJobForm, setShowJobForm] = useState(false);
+  const [view, setView] = useState('list'); // 'list', 'jobForm', 'applicantDetail', 'schedulingForm', 'assessmentForm'
   const [selectedJob, setSelectedJob] = useState(null);
+  const [selectedApplicant, setSelectedApplicant] = useState(null);
   const [jobToEdit, setJobToEdit] = useState(null);
+  const navigate = useNavigate();
 
-  // Fungsi untuk mengambil daftar pekerjaan
   const fetchJobs = async () => {
     setLoading(true);
     let query = supabase
       .from('jobs')
-      .select('*')
+      .select('*, applicants(*)')
       .order('created_at', { ascending: false });
     
-    // Filter berdasarkan perusahaan jika bukan admin_hc
-    if (userProfile.role !== 'admin_hc' && userProfile.company) {
+    if (userProfile?.role !== 'admin_hc' && userProfile?.company) {
       query = query.eq('company', userProfile.company);
     }
 
@@ -79,16 +102,14 @@ export default function AdminDashboard({ userProfile }) {
     setLoading(false);
   };
   
-  // Fungsi untuk mengambil daftar pelamar berdasarkan pekerjaan
   const fetchApplicants = async (jobId) => {
     setLoading(true);
     let query = supabase
       .from('applicants')
-      .select('*')
+      .select('*, jobs (title)')
       .eq('job_id', jobId);
       
-    // Filter berdasarkan perusahaan hanya jika userProfile.company tidak kosong
-    if (userProfile.company) {
+    if (userProfile?.company) {
       query = query.eq('company', userProfile.company);
     }
 
@@ -102,7 +123,37 @@ export default function AdminDashboard({ userProfile }) {
     setLoading(false);
   };
   
-  // Fungsi untuk mengunduh file dari Supabase Storage
+  const handleUpdateApplicantStatus = async (applicantId, newStatus) => {
+    const applicant = applicants.find(app => app.id === applicantId);
+
+    if (newStatus === 'Scheduled for Interview') {
+      setSelectedApplicant(applicant);
+      setView('schedulingForm');
+      return;
+    }
+    
+    if (newStatus === 'Scheduled for Assessment') {
+      setSelectedApplicant(applicant);
+      setView('assessmentForm');
+      return;
+    }
+
+    const { error } = await supabase
+      .from('applicants')
+      .update({ status: newStatus })
+      .eq('id', applicantId);
+
+    if (error) {
+      alert('Gagal memperbarui status pelamar: ' + error.message);
+    } else {
+      const updatedApplicants = applicants.map(app => 
+        app.id === applicantId ? { ...app, status: newStatus } : app
+      );
+      setApplicants(updatedApplicants);
+      setSelectedApplicant(prev => prev?.id === applicantId ? {...prev, status: newStatus} : prev);
+    }
+  };
+  
   const handleDownloadFile = async (filePath) => {
     const { data, error } = await supabase.storage
       .from('candidate-uploads')
@@ -131,14 +182,37 @@ export default function AdminDashboard({ userProfile }) {
         alert('Gagal menghapus lowongan: ' + error.message);
       } else {
         alert('Lowongan berhasil dihapus.');
-        fetchJobs(); // Muat ulang daftar lowongan
+        fetchJobs();
       }
     }
   };
+  
+  const handleSchedulingComplete = () => {
+    setView('list');
+    fetchApplicants(selectedJob.id);
+  };
+  
+  const handleAssessmentComplete = () => {
+    setView('list');
+    fetchApplicants(selectedJob.id);
+  };
+  
+  const handleOpenJobForm = (job = null) => {
+    setJobToEdit(job);
+    navigate('/admin/jobForm', { state: { jobToEdit: job } });
+  };
+  
+  const handleCloseJobForm = () => {
+    navigate('/admin');
+    setJobToEdit(null);
+    fetchJobs();
+  };
 
   useEffect(() => {
-    fetchJobs();
-  }, [userProfile]); // Tambahkan userProfile sebagai dependency agar daftar diperbarui saat peran berubah
+    if (userProfile) {
+      fetchJobs();
+    }
+  }, [userProfile]);
 
   if (loading) {
     return (
@@ -147,39 +221,62 @@ export default function AdminDashboard({ userProfile }) {
       </div>
     );
   }
-
-  // Tampilkan formulir Tambah/Edit Lowongan
-  if (showJobForm) {
-    return (
-      <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full flex justify-center items-center z-50">
-        <JobForm
-          onClose={() => { setShowJobForm(false); setJobToEdit(null); }}
-          onJobAdded={fetchJobs} // Perbarui daftar setelah menambah/mengedit
-          jobToEdit={jobToEdit}
-        />
-      </div>
-    );
-  }
-
-  return (
-    <div className="p-8">
-      <h2 className="text-3xl font-bold text-gray-900 mb-6">Dashboard Admin</h2>
-      <p className="text-gray-600">Selamat datang, <span className="font-semibold">{userProfile.email}</span>.</p>
-      <p className="text-gray-600">Peran Anda: <span className="font-semibold capitalize">{userProfile.role}</span>.</p>
-
-      {selectedJob ? (
-        <ApplicantsList 
-          job={selectedJob} 
-          applicants={applicants} 
-          onBack={() => setSelectedJob(null)} 
+  
+  const renderView = () => {
+    if (view === 'jobForm') {
+      return (
+        <JobFormPage onClose={handleCloseJobForm} onJobAdded={fetchJobs} jobToEdit={jobToEdit} />
+      );
+    } else if (view === 'schedulingForm') {
+      return (
+        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full flex justify-center items-center z-50">
+          <SchedulingForm
+            applicant={selectedApplicant}
+            onClose={() => setView('applicantDetail')}
+            onScheduleComplete={handleSchedulingComplete}
+          />
+        </div>
+      );
+    } else if (view === 'assessmentForm') {
+      return (
+        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full flex justify-center items-center z-50">
+          <AssessmentForm
+            applicant={selectedApplicant}
+            onClose={() => setView('applicantDetail')}
+            onScheduleComplete={handleAssessmentComplete}
+          />
+        </div>
+      );
+    } else if (view === 'applicantDetail') {
+      return (
+        <ApplicantDetail
+          applicant={selectedApplicant}
+          onBack={() => setView('applicantsList')}
           onDownloadFile={handleDownloadFile}
+          onUpdateStatus={handleUpdateApplicantStatus}
         />
-      ) : (
+      );
+    } else if (view === 'applicantsList') {
+      return (
+        <ApplicantsList
+          job={selectedJob}
+          applicants={applicants}
+          onBack={() => setView('list')}
+          onDownloadFile={handleDownloadFile}
+          onUpdateStatus={handleUpdateApplicantStatus}
+          onSelectApplicant={(applicant) => {
+            setSelectedApplicant(applicant);
+            setView('applicantDetail');
+          }}
+        />
+      );
+    } else {
+      return (
         <>
           <div className="mt-8 flex justify-between items-center">
             <h3 className="text-2xl font-semibold">Kelola Lowongan</h3>
             <button
-              onClick={() => setShowJobForm(true)}
+              onClick={() => handleOpenJobForm()}
               className="bg-blue-500 text-white font-bold py-2 px-4 rounded-full hover:bg-blue-600 transition-colors duration-200"
             >
               + Tambah Lowongan
@@ -188,20 +285,21 @@ export default function AdminDashboard({ userProfile }) {
           <div className="mt-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {jobs.length > 0 ? (
               jobs.map(job => (
-                <div 
-                  key={job.id} 
+                <div
+                  key={job.id}
                   className="bg-white rounded-xl shadow-lg p-6 transition-shadow duration-300 border border-gray-200"
                 >
                   <div className="cursor-pointer" onClick={() => {
                     setSelectedJob(job);
                     fetchApplicants(job.id);
+                    setView('applicantsList');
                   }}>
                     <h4 className="text-xl font-semibold text-gray-800">{job.title}</h4>
                     <p className="text-sm text-gray-500 mt-1">{job.company} | {job.location}</p>
                   </div>
                   <div className="mt-4 flex space-x-2">
                     <button
-                      onClick={() => { setJobToEdit(job); setShowJobForm(true); }}
+                      onClick={() => { setJobToEdit(job); handleOpenJobForm(job); }}
                       className="text-sm text-blue-500 hover:text-blue-700 font-semibold"
                     >
                       Edit
@@ -220,7 +318,16 @@ export default function AdminDashboard({ userProfile }) {
             )}
           </div>
         </>
-      )}
+      );
+    }
+  };
+
+  return (
+    <div className="p-8">
+      <h2 className="text-3xl font-bold text-gray-900 mb-6">Dashboard Admin</h2>
+      <p className="text-gray-600">Selamat datang, <span className="font-semibold">{userProfile?.email}</span>.</p>
+      <p className="text-gray-600">Peran Anda: <span className="font-semibold capitalize">{userProfile?.role}</span>.</p>
+      {renderView()}
     </div>
   );
 }
