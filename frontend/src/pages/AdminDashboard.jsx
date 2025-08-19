@@ -3,7 +3,6 @@ import { supabase } from '../supabaseClient';
 import { useAuth } from '../contexts/AuthContext';
 import JobForm from '../components/JobForm';
 import ApplicantDetail from '../components/ApplicantDetail';
-import AssessmentForm from '../components/AssessmentForm';
 import SchedulingForm from '../components/SchedulingForm';
 import { useNavigate } from 'react-router-dom';
 import JobFormPage from './JobFormPage';
@@ -75,7 +74,7 @@ export default function AdminDashboard() {
   const [loading, setLoading] = useState(true);
   const [jobs, setJobs] = useState([]);
   const [applicants, setApplicants] = useState([]);
-  const [view, setView] = useState('list'); // 'list', 'jobForm', 'applicantDetail', 'schedulingForm', 'assessmentForm'
+  const [view, setView] = useState('list'); // 'list', 'jobForm', 'applicantDetail', 'schedulingForm'
   const [selectedJob, setSelectedJob] = useState(null);
   const [selectedApplicant, setSelectedApplicant] = useState(null);
   const [jobToEdit, setJobToEdit] = useState(null);
@@ -132,12 +131,6 @@ export default function AdminDashboard() {
       return;
     }
     
-    if (newStatus === 'Scheduled for Assessment') {
-      setSelectedApplicant(applicant);
-      setView('assessmentForm');
-      return;
-    }
-
     const { error } = await supabase
       .from('applicants')
       .update({ status: newStatus })
@@ -192,11 +185,6 @@ export default function AdminDashboard() {
     fetchApplicants(selectedJob.id);
   };
   
-  const handleAssessmentComplete = () => {
-    setView('list');
-    fetchApplicants(selectedJob.id);
-  };
-  
   const handleOpenJobForm = (job = null) => {
     setJobToEdit(job);
     navigate('/admin/jobForm', { state: { jobToEdit: job } });
@@ -234,16 +222,6 @@ export default function AdminDashboard() {
             applicant={selectedApplicant}
             onClose={() => setView('applicantDetail')}
             onScheduleComplete={handleSchedulingComplete}
-          />
-        </div>
-      );
-    } else if (view === 'assessmentForm') {
-      return (
-        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full flex justify-center items-center z-50">
-          <AssessmentForm
-            applicant={selectedApplicant}
-            onClose={() => setView('applicantDetail')}
-            onScheduleComplete={handleAssessmentComplete}
           />
         </div>
       );

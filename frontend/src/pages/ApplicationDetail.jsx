@@ -12,9 +12,9 @@ const getStatusMessage = (status) => {
     case 'Shortlisted':
       return {
         title: 'Lolos Seleksi Berkas!',
-        message: 'Selamat! Anda telah lolos seleksi berkas. Kami akan segera menghubungi Anda untuk tahap interview.',
+        message: 'Selamat! Anda telah lolos seleksi berkas. Detail untuk tahap berikutnya sudah tersedia di bawah.',
         color: 'bg-green-100 text-green-800',
-        actionMessage: ''
+        actionMessage: 'Silakan periksa detail di bawah untuk informasi lebih lanjut.'
       };
     case 'Scheduled for Interview':
       return {
@@ -56,6 +56,10 @@ const getStatusMessage = (status) => {
 
 export default function ApplicationDetail({ application, onBack }) {
   const { title, message, color, actionMessage } = getStatusMessage(application.status);
+  const { jobs } = application;
+
+  const showAssessmentDetails = application.status === 'Shortlisted' && jobs?.recruitment_process_type === 'assessment';
+  const showInterviewDetails = application.status === 'Shortlisted' && jobs?.recruitment_process_type === 'interview';
 
   return (
     <div className="p-8">
@@ -69,30 +73,45 @@ export default function ApplicationDetail({ application, onBack }) {
         <h2 className="text-3xl font-bold text-gray-900 mb-2">{title}</h2>
         <p className="text-gray-600 leading-relaxed mb-4">{message}</p>
         
-        {application.status === 'Scheduled for Interview' && application.interview_details && (
+        {/* Tampilkan detail assessment jika statusnya Shortlisted dan prosesnya Assessment */}
+        {showAssessmentDetails && jobs?.assessment_details && (
           <div className="mt-6 p-4 bg-gray-100 rounded-lg">
-            <h4 className="font-semibold text-gray-800">Detail Interview</h4>
-            <p className="mt-2 text-sm text-gray-600"><strong>Tanggal:</strong> {application.interview_details.date}</p>
-            <p className="text-sm text-gray-600"><strong>Waktu:</strong> {application.interview_details.time}</p>
-            <p className="text-sm text-gray-600"><strong>Kontak Person:</strong> {application.contact_person}</p>
+            <h4 className="font-semibold text-gray-800">Detail Penilaian</h4>
+            <p className="mt-2 text-sm text-gray-600"><strong>Tanggal:</strong> {new Date(jobs.assessment_details.deadline).toLocaleDateString()}</p>
+            <p className="text-sm text-gray-600"><strong>Waktu:</strong> {new Date(jobs.assessment_details.deadline).toLocaleTimeString()}</p>
             <p className="text-sm text-gray-600">
               <strong>Link:</strong> 
-              <a href={application.interview_details.link} target="_blank" rel="noopener noreferrer" className="text-teal-600 hover:underline ml-1">
-                {application.interview_details.link}
+              <a href={jobs.assessment_details.link} target="_blank" rel="noopener noreferrer" className="text-teal-600 hover:underline ml-1">
+                {jobs.assessment_details.link}
               </a>
             </p>
           </div>
         )}
-        
         {actionMessage && (
           <div className="mt-6 p-4 bg-blue-50 border-l-4 border-blue-500 text-blue-800 rounded-lg">
             <p className="text-sm">{actionMessage}</p>
           </div>
         )}
 
+        {/* Tampilkan detail interview jika statusnya Shortlisted dan prosesnya Interview */}
+        {showInterviewDetails && jobs?.interview_details && (
+          <div className="mt-6 p-4 bg-gray-100 rounded-lg">
+            <h4 className="font-semibold text-gray-800">Detail Interview</h4>
+            <p className="mt-2 text-sm text-gray-600"><strong>Waktu Tersedia:</strong> {jobs.interview_details.start_time} - {jobs.interview_details.end_time}</p>
+            <p className="text-sm text-gray-600">
+              <strong>Link:</strong> 
+              <a href={jobs.interview_details.link} target="_blank" rel="noopener noreferrer" className="text-teal-600 hover:underline ml-1">
+                {jobs.interview_details.link}
+              </a>
+            </p>
+            <p className="text-sm text-gray-600"><strong>Kontak:</strong> {jobs.interview_details.contact_person}</p>
+          </div>
+        )}
+        
+
         <div className="mt-6">
-          <h3 className="text-xl font-semibold text-gray-800">{application.jobs.title}</h3>
-          <p className="text-sm text-gray-500 mt-1">Perusahaan: {application.jobs.company}</p>
+          <h3 className="text-xl font-semibold text-gray-800">{jobs.title}</h3>
+          <p className="text-sm text-gray-500 mt-1">Perusahaan: {jobs.company}</p>
         </div>
       </div>
     </div>

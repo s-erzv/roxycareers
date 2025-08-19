@@ -26,9 +26,14 @@ export default function CandidateDashboard() {
           status,
           created_at,
           interview_details,
+          assessment_details,
+          contact_person,
           jobs (
             title,
-            company
+            company,
+            recruitment_process_type,
+            interview_details,
+            assessment_details
           )
         `)
         .eq('user_id', session.user.id)
