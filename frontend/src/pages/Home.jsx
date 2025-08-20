@@ -32,11 +32,12 @@ const JobDetail = ({ job, onBack }) => {
     const [email, setEmail] = useState('');
     const [customAnswers, setCustomAnswers] = useState({});
 
-    const handleCustomAnswerChange = (label, value, fieldType) => {
+    const handleCustomAnswerChange = (label, value, fieldType, checked = false) => {
       let processedValue = value;
       
-      // Convert number inputs to actual numbers
-      if (fieldType === 'number' && value !== '') {
+      if (fieldType === 'boolean') {
+        processedValue = checked;
+      } else if (fieldType === 'number' && value !== '') {
         const numValue = parseFloat(value);
         if (!isNaN(numValue)) {
           processedValue = numValue;
@@ -71,7 +72,7 @@ const JobDetail = ({ job, onBack }) => {
 
       try {
         // Upload files to Supabase Storage (this part remains in the frontend)
-        const uploadFile = async (file, prefix) => {
+        const uploadFile = async (file) => {
           const fileName = sanitizeFileName(file.name);
           const filePath = `${userId || 'public'}/${fileName}`;
           
@@ -84,13 +85,13 @@ const JobDetail = ({ job, onBack }) => {
         };
 
         const filesToUpload = [];
-        filesToUpload.push(uploadFile(cvFile, 'CV'));
-        if (certFile) filesToUpload.push(uploadFile(certFile, 'Sertifikat'));
+        filesToUpload.push(uploadFile(cvFile));
+        if (certFile) filesToUpload.push(uploadFile(certFile));
         
         await Promise.all(filesToUpload);
 
         // Send application data to the backend for processing
-        const response = await fetch('http://localhost:3000/apply', {
+        const response = await fetch('http://localhost:8000/api/apply', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -131,31 +132,7 @@ const JobDetail = ({ job, onBack }) => {
           <input type="email" name="email" value={email} onChange={(e) => setEmail(e.target.value)} className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline" required />
         </div>
         
-        {job.custom_fields && job.custom_fields.length > 0 && (
-          <div className="space-y-4 border-t border-gray-200 pt-4 mt-4">
-            <h4 className="font-semibold text-gray-700">Pertanyaan Pre-Screening</h4>
-            {job.custom_fields.map((field, index) => (
-              <div key={index}>
-                <label className="block text-gray-700 text-sm font-bold mb-2">
-                  {field.label}
-                  {field.required && <span className="text-red-500 ml-1">*</span>}
-                </label>
-                <input
-                  type={field.type}
-                  value={customAnswers[field.label] || ''}
-                  onChange={(e) => handleCustomAnswerChange(field.label, e.target.value, field.type)}
-                  className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
-                  required={field.required}
-                  // Add additional attributes for number inputs
-                  {...(field.type === 'number' && {
-                    step: 'any',
-                    placeholder: 'Contoh: 3.5'
-                  })}
-                />
-              </div>
-            ))}
-          </div>
-        )}
+        
 
         <div>
           <label className="block text-gray-700 text-sm font-bold mb-2">Upload CV</label>

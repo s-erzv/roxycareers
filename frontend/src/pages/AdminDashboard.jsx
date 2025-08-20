@@ -1,4 +1,3 @@
-// AdminDashboard.jsx
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
 import { useAuth } from '../contexts/AuthContext';
@@ -10,7 +9,7 @@ import JobFormPage from './JobFormPage';
 // Fungsi untuk memanggil rescreening dari backend
 const handleRescreening = async (applicantId) => {
   try {
-    const response = await fetch('http://localhost:3000/rescreen-applicant', {
+    const response = await fetch('http://localhost:8000/api/rescreen-applicant', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -105,7 +104,6 @@ export default function AdminDashboard() {
   const [view, setView] = useState('list');
   const [selectedJob, setSelectedJob] = useState(null);
   const [selectedApplicant, setSelectedApplicant] = useState(null);
-  const [jobToEdit, setJobToEdit] = useState(null);
   const navigate = useNavigate();
 
   const fetchJobs = async () => {
@@ -214,14 +212,11 @@ export default function AdminDashboard() {
   };
   
   const handleOpenJobForm = (job = null) => {
-    setJobToEdit(job);
     navigate('/admin/jobForm', { state: { jobToEdit: job } });
   };
   
   const handleCloseJobForm = () => {
     navigate('/admin');
-    setJobToEdit(null);
-    fetchJobs();
   };
 
   useEffect(() => {
@@ -239,17 +234,16 @@ export default function AdminDashboard() {
   }
   
   const renderView = () => {
-    if (view === 'jobForm') {
-      return (
-        <JobFormPage onClose={handleCloseJobForm} onJobAdded={fetchJobs} jobToEdit={jobToEdit} />
-      );
-    } else if (view === 'schedulingForm') {
+    if (view === 'schedulingForm') {
       return (
         <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full flex justify-center items-center z-50">
           <SchedulingForm
             applicant={selectedApplicant}
             onClose={() => setView('applicantDetail')}
-            onScheduleComplete={handleSchedulingComplete}
+            onScheduleComplete={() => {
+              setView('applicantsList');
+              fetchApplicants(selectedJob.id);
+            }}
           />
         </div>
       );
@@ -305,7 +299,7 @@ export default function AdminDashboard() {
                   </div>
                   <div className="mt-4 flex space-x-2">
                     <button
-                      onClick={() => { setJobToEdit(job); handleOpenJobForm(job); }}
+                      onClick={() => handleOpenJobForm(job)}
                       className="text-sm text-blue-500 hover:text-blue-700 font-semibold"
                     >
                       Edit

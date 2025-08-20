@@ -21,10 +21,8 @@ export default function JobForm({ onClose, onJobAdded, jobToEdit }) {
 
     useEffect(() => {
     if (jobToEdit) {
-      console.log("Data Job yang akan diedit:", jobToEdit);
+      //console.log("Data Job yang akan diedit:", jobToEdit);
       
-      // Mengisi form dengan data yang ada,
-      // menggunakan nullish coalescing (??) untuk menangani null/undefined dengan lebih baik
       setFormData({
         title: jobToEdit.title ?? '',
         company: jobToEdit.company ?? '',
@@ -67,14 +65,16 @@ export default function JobForm({ onClose, onJobAdded, jobToEdit }) {
   };
 
   const handleCustomFieldChange = (index, e) => {
-    const { name, value, type } = e.target; // Dapatkan type dari input
+    const { name, value, checked, type } = e.target;
     const newCustomFields = [...formData.custom_fields];
-    // Khusus untuk input checkbox, gunakan e.target.checked
+    
+    // Perbarui logika ini untuk menangani checkbox
     if (type === 'checkbox') {
-        newCustomFields[index][name] = e.target.checked;
+      newCustomFields[index][name] = checked;
     } else {
-        newCustomFields[index][name] = value;
+      newCustomFields[index][name] = value;
     }
+    
     setFormData(prev => ({ ...prev, custom_fields: newCustomFields }));
   };
 
@@ -176,14 +176,40 @@ export default function JobForm({ onClose, onJobAdded, jobToEdit }) {
                 <option value="number">Number</option>
                 <option value="boolean">Boolean</option>
               </select>
-              <input
-                type="text"
-                name="criteria"
-                value={field.criteria}
-                onChange={(e) => handleCustomFieldChange(index, e)}
-                placeholder="Kriteria (contoh: > 3.0)"
-                className="w-full sm:w-1/3 p-2 border rounded-lg"
-              />
+              
+              {field.type === 'boolean' ? (
+                <div className="flex items-center space-x-2">
+                  <label>
+                    <input
+                      type="checkbox"
+                      name="criteria"
+                      checked={field.criteria === 'true'}
+                      onChange={(e) => handleCustomFieldChange(index, { target: { name: 'criteria', value: e.target.checked ? 'true' : 'false' } })}
+                      className="form-checkbox"
+                    />
+                    <span className="ml-2 text-gray-700">Wajib Bernilai 'True'</span>
+                  </label>
+                </div>
+              ) : (
+                <input
+                  type="text"
+                  name="criteria"
+                  value={field.criteria}
+                  onChange={(e) => handleCustomFieldChange(index, e)}
+                  placeholder="Kriteria (contoh: > 3.0)"
+                  className="w-full sm:w-1/3 p-2 border rounded-lg"
+                />
+              )}
+              
+              <div className="flex items-center space-x-2">
+                <input
+                  type="checkbox"
+                  name="required"
+                  checked={field.required}
+                  onChange={(e) => handleCustomFieldChange(index, { target: { name: 'required', value: e.target.checked } })}
+                />
+                <span className="text-gray-700 text-sm">Wajib Diisi</span>
+              </div>
               <button
                 type="button"
                 onClick={() => removeCustomField(index)}

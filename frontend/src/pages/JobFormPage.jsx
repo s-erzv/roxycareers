@@ -1,9 +1,11 @@
-import React from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import JobForm from '../components/JobForm';
 
-export default function JobFormPage({ onJobAdded, jobToEdit }) {
+export default function JobFormPage({ onJobAdded }) {
   const navigate = useNavigate();
+  const location = useLocation();
+  
+  const jobToEdit = location.state?.jobToEdit;
 
   const handleClose = () => {
     navigate('/admin');
@@ -14,7 +16,7 @@ export default function JobFormPage({ onJobAdded, jobToEdit }) {
       <JobForm 
         onClose={handleClose} 
         onJobAdded={onJobAdded} 
-        jobToEdit={jobToEdit}
+        jobToEdit={jobToEdit} // Sekarang jobToEdit sudah terisi
       />
     </div>
   );
