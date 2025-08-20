@@ -1,3 +1,4 @@
+// JobForm.jsx
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
 
@@ -12,40 +13,68 @@ export default function JobForm({ onClose, onJobAdded, jobToEdit }) {
     level: '',
     description: '',
     custom_fields: [],
-    apply_deadline: '', // Tambahan
-    recruitment_process_type: '', // Tambahan
-    interview_details: null, // Tambahan
-    assessment_details: null // Tambahan
+    apply_deadline: '',
+    recruitment_process_type: '',
+    interview_details: null,
+    assessment_details: null
   });
 
-  useEffect(() => {
+    useEffect(() => {
     if (jobToEdit) {
+      console.log("Data Job yang akan diedit:", jobToEdit);
+      
+      // Mengisi form dengan data yang ada,
+      // menggunakan nullish coalescing (??) untuk menangani null/undefined dengan lebih baik
       setFormData({
-        title: jobToEdit.title,
-        company: jobToEdit.company,
-        location: jobToEdit.location,
-        division: jobToEdit.division,
-        type: jobToEdit.type,
-        level: jobToEdit.level,
-        description: jobToEdit.description,
-        custom_fields: jobToEdit.custom_fields || [],
-        apply_deadline: jobToEdit.apply_deadline || '',
-        recruitment_process_type: jobToEdit.recruitment_process_type || '',
-        interview_details: jobToEdit.interview_details || null,
-        assessment_details: jobToEdit.assessment_details || null,
+        title: jobToEdit.title ?? '',
+        company: jobToEdit.company ?? '',
+        location: jobToEdit.location ?? '',
+        division: jobToEdit.division ?? '',
+        type: jobToEdit.type ?? '',
+        level: jobToEdit.level ?? '',
+        description: jobToEdit.description ?? '',
+        custom_fields: jobToEdit.custom_fields ?? [],
+        apply_deadline: jobToEdit.apply_deadline ?? '',
+        recruitment_process_type: jobToEdit.recruitment_process_type ?? '',
+        // Untuk objek nested, pastikan objek tersebut ada sebelum diisi
+        interview_details: jobToEdit.interview_details ?? null,
+        assessment_details: jobToEdit.assessment_details ?? null,
+      });
+    } else {
+      // Mereset form jika tidak ada job yang diedit (untuk kasus tambah baru)
+      setFormData({
+        title: '',
+        company: '',
+        location: '',
+        division: '',
+        type: '',
+        level: '',
+        description: '',
+        custom_fields: [],
+        apply_deadline: '',
+        recruitment_process_type: '',
+        interview_details: null,
+        assessment_details: null,
       });
     }
   }, [jobToEdit]);
+
+  // ... (kode lainnya tetap sama)
 
   const handleChange = (e) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
   };
-  
+
   const handleCustomFieldChange = (index, e) => {
-    const { name, value } = e.target;
+    const { name, value, type } = e.target; // Dapatkan type dari input
     const newCustomFields = [...formData.custom_fields];
-    newCustomFields[index][name] = value;
+    // Khusus untuk input checkbox, gunakan e.target.checked
+    if (type === 'checkbox') {
+        newCustomFields[index][name] = e.target.checked;
+    } else {
+        newCustomFields[index][name] = value;
+    }
     setFormData(prev => ({ ...prev, custom_fields: newCustomFields }));
   };
 
@@ -66,7 +95,7 @@ export default function JobForm({ onClose, onJobAdded, jobToEdit }) {
       [type]: prev[type] ? { ...prev[type], [name]: value } : { [name]: value }
     }));
   };
-
+  
   const addCustomField = () => {
     setFormData(prev => ({
       ...prev,
@@ -78,7 +107,7 @@ export default function JobForm({ onClose, onJobAdded, jobToEdit }) {
     const newCustomFields = formData.custom_fields.filter((_, i) => i !== index);
     setFormData(prev => ({ ...prev, custom_fields: newCustomFields }));
   };
-
+  
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);

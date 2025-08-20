@@ -1,11 +1,33 @@
+// AdminDashboard.jsx
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
 import { useAuth } from '../contexts/AuthContext';
-import JobForm from '../components/JobForm';
 import ApplicantDetail from '../components/ApplicantDetail';
 import SchedulingForm from '../components/SchedulingForm';
 import { useNavigate } from 'react-router-dom';
 import JobFormPage from './JobFormPage';
+
+// Fungsi untuk memanggil rescreening dari backend
+const handleRescreening = async (applicantId) => {
+  try {
+    const response = await fetch('http://localhost:3000/rescreen-applicant', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ applicant_id: applicantId }),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.error);
+    }
+    
+    alert('Rescreening berhasil! Status pelamar akan diperbarui.');
+  } catch (error) {
+    alert('Gagal melakukan rescreening: ' + error.message);
+  }
+};
 
 // Komponen untuk menampilkan daftar pelamar
 const ApplicantsList = ({ job, applicants, onBack, onDownloadFile, onUpdateStatus, onSelectApplicant }) => (
@@ -50,12 +72,18 @@ const ApplicantsList = ({ job, applicants, onBack, onDownloadFile, onUpdateStatu
                     </div>
                   )}
                 </div>
-                <div>
+                <div className="flex items-center space-x-2">
                   <button
                     onClick={() => onSelectApplicant(applicant)}
                     className="text-sm text-blue-500 hover:text-blue-700 font-semibold"
                   >
                     Lihat Detail
+                  </button>
+                  <button
+                    onClick={() => handleRescreening(applicant.id)}
+                    className="text-sm text-yellow-500 hover:text-yellow-700 font-semibold"
+                  >
+                    Rescreen
                   </button>
                 </div>
               </div>
@@ -74,7 +102,7 @@ export default function AdminDashboard() {
   const [loading, setLoading] = useState(true);
   const [jobs, setJobs] = useState([]);
   const [applicants, setApplicants] = useState([]);
-  const [view, setView] = useState('list'); // 'list', 'jobForm', 'applicantDetail', 'schedulingForm'
+  const [view, setView] = useState('list');
   const [selectedJob, setSelectedJob] = useState(null);
   const [selectedApplicant, setSelectedApplicant] = useState(null);
   const [jobToEdit, setJobToEdit] = useState(null);

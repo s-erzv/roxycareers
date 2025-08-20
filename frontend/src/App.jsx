@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
  
 import Auth from './pages/Auth';
 import Home from './pages/Home';
@@ -41,7 +41,7 @@ const Header = () => {
     </header>
   );
 };
-
+ 
 const AppRoutes = () => {
   const { session, userProfile, loading } = useAuth();
   
@@ -52,27 +52,31 @@ const AppRoutes = () => {
       </div>
     );
   }
-
+ 
   if (!session) {
     return <Auth />;
   }
   
-  if (userProfile && userProfile.role === 'candidate') {
-    return (
-      <Routes>
-        <Route path="/" element={<Home />} />
-        <Route path="/home" element={<Home />} />
-        <Route path="/dashboard" element={<CandidateDashboard />} />
-      </Routes>
-    );
-  } else if (userProfile && userProfile.role !== 'candidate') {
-    return (
-      <Routes>
-        <Route path="*" element={<AdminDashboard />} />
-        <Route path="/admin" element={<AdminDashboard />} />
-        <Route path="/admin/jobForm" element={<JobFormPage />} />
-      </Routes>
-    );
+  if (userProfile) {
+    if (userProfile.role === 'candidate') {
+      return (
+        <Routes>
+          <Route path="/" element={<Home />} />
+          <Route path="/home" element={<Home />} />
+          <Route path="/dashboard" element={<CandidateDashboard />} />
+          <Route path="*" element={<Navigate to="/home" />} />
+        </Routes>
+      );
+    } else { // Jika role bukan 'candidate', asumsikan itu admin/admin_hc
+      return (
+        <Routes>
+          {/* Perbaikan: Urutan rute penting. Rute spesifik harus di atas. */}
+          <Route path="/admin/jobForm" element={<JobFormPage />} />
+          <Route path="/admin" element={<AdminDashboard />} />
+          <Route path="*" element={<Navigate to="/admin" />} />
+        </Routes>
+      );
+    }
   }
   
   return (
@@ -81,7 +85,7 @@ const AppRoutes = () => {
     </div>
   );
 };
-
+ 
 export default function App() {
   return (
     <BrowserRouter>

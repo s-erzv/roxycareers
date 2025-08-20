@@ -24,7 +24,7 @@ const JobDetail = ({ job, onBack }) => {
   const [showModal, setShowModal] = useState(false);
   const { session } = useAuth();
 
-  const ApplicationForm = ({ job }) => {
+  const ApplicationForm = ({ job, onClose }) => {
     const [loading, setLoading] = useState(false);
     const [cvFile, setCvFile] = useState(null);
     const [certFile, setCertFile] = useState(null);
@@ -32,9 +32,20 @@ const JobDetail = ({ job, onBack }) => {
     const [email, setEmail] = useState('');
     const [customAnswers, setCustomAnswers] = useState({});
 
-    const handleCustomAnswerChange = (label, value) => {
-      setCustomAnswers(prev => ({ ...prev, [label]: value }));
+    const handleCustomAnswerChange = (label, value, fieldType) => {
+      let processedValue = value;
+      
+      // Convert number inputs to actual numbers
+      if (fieldType === 'number' && value !== '') {
+        const numValue = parseFloat(value);
+        if (!isNaN(numValue)) {
+          processedValue = numValue;
+        }
+      }
+      
+      setCustomAnswers(prev => ({ ...prev, [label]: processedValue }));
     };
+
 
     const handleSubmit = async (e) => {
       e.preventDefault();
@@ -59,6 +70,7 @@ const JobDetail = ({ job, onBack }) => {
       const uploadedFiles = [];
 
       try {
+        // Upload files to Supabase Storage (this part remains in the frontend)
         const uploadFile = async (file, prefix) => {
           const fileName = sanitizeFileName(file.name);
           const filePath = `${userId || 'public'}/${fileName}`;
@@ -68,7 +80,7 @@ const JobDetail = ({ job, onBack }) => {
             .upload(filePath, file, { upsert: true, contentType: file.type });
 
           if (error) throw error;
-          uploadedFiles.push(`${prefix}: ${data.path}`);
+          uploadedFiles.push(data.path);
         };
 
         const filesToUpload = [];
@@ -77,24 +89,30 @@ const JobDetail = ({ job, onBack }) => {
         
         await Promise.all(filesToUpload);
 
-        const { error: insertError } = await supabase
-          .from('applicants')
-          .insert([
-            {
-              name: name,
-              email: email,
-              job_id: job.id,
-              user_id: userId,
-              status: 'Applied',
-              uploaded_files: uploadedFiles,
-              company: job.company,
-              custom_answers: customAnswers
-            },
-          ]);
+        // Send application data to the backend for processing
+        const response = await fetch('http://localhost:3000/apply', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            name,
+            email,
+            job_id: job.id,
+            user_id: userId,
+            uploadedFiles,
+            company: job.company,
+            custom_answers: customAnswers,
+          }),
+        });
 
-        if (insertError) throw insertError;
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.error);
+        }
+
         alert('Lamaran Anda berhasil dikirim!');
-        setShowModal(false);
+        onClose(); // Tutup modal setelah berhasil
       } catch (error) {
         alert('Gagal mengirim lamaran: ' + error.message);
       } finally {
@@ -118,13 +136,21 @@ const JobDetail = ({ job, onBack }) => {
             <h4 className="font-semibold text-gray-700">Pertanyaan Pre-Screening</h4>
             {job.custom_fields.map((field, index) => (
               <div key={index}>
-                <label className="block text-gray-700 text-sm font-bold mb-2">{field.label}</label>
+                <label className="block text-gray-700 text-sm font-bold mb-2">
+                  {field.label}
+                  {field.required && <span className="text-red-500 ml-1">*</span>}
+                </label>
                 <input
                   type={field.type}
                   value={customAnswers[field.label] || ''}
-                  onChange={(e) => handleCustomAnswerChange(field.label, e.target.value)}
+                  onChange={(e) => handleCustomAnswerChange(field.label, e.target.value, field.type)}
                   className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
                   required={field.required}
+                  // Add additional attributes for number inputs
+                  {...(field.type === 'number' && {
+                    step: 'any',
+                    placeholder: 'Contoh: 3.5'
+                  })}
                 />
               </div>
             ))}
@@ -140,7 +166,7 @@ const JobDetail = ({ job, onBack }) => {
           <input type="file" onChange={(e) => setCertFile(e.target.files[0])} className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-teal-50 file:text-teal-700 hover:file:bg-teal-100" />
         </div>
         <div className="flex justify-end space-x-4 mt-6">
-          <button type="button" onClick={() => setShowModal(false)} className="bg-gray-300 text-gray-800 font-bold py-2 px-4 rounded-full hover:bg-gray-400 transition-colors duration-200">
+          <button type="button" onClick={onClose} className="bg-gray-300 text-gray-800 font-bold py-2 px-4 rounded-full hover:bg-gray-400 transition-colors duration-200">
             Batal
           </button>
           <button type="submit" className="bg-teal-500 text-white font-bold py-2 px-4 rounded-full hover:bg-teal-600 transition-colors duration-200" disabled={loading}>
@@ -167,7 +193,26 @@ const JobDetail = ({ job, onBack }) => {
           <span className="bg-purple-100 text-purple-800 text-sm font-semibold px-2.5 py-0.5 rounded-full">{job.type}</span>
           <span className="bg-pink-100 text-pink-800 text-sm font-semibold px-2.5 py-0.5 rounded-full">{job.level}</span>
         </div>
-        <p className="mt-6 text-gray-700 leading-relaxed">{job.description}</p>
+        
+        <div className="mt-6 text-gray-700 leading-relaxed" dangerouslySetInnerHTML={{ __html: job.description }}></div>
+        
+        <div className="mt-6 border-t border-gray-200 pt-6">
+          <h4 className="font-semibold text-lg">Informasi Tambahan</h4>
+          {job.recruitment_process_type === 'assessment' && job.assessment_details && (
+            <p className="mt-2 text-sm text-gray-600">
+              <span className="font-semibold">Proses selanjutnya:</span> Asesmen {job.assessment_details.type}
+            </p>
+          )}
+          {job.recruitment_process_type === 'interview' && job.interview_details && (
+            <p className="mt-2 text-sm text-gray-600">
+              <span className="font-semibold">Proses selanjutnya:</span> Interview
+            </p>
+          )}
+          <p className="mt-2 text-sm text-gray-600">
+            <span className="font-semibold">Batas Waktu Lamaran:</span> {new Date(job.apply_deadline).toLocaleString()}
+          </p>
+        </div>
+
         <button onClick={() => setShowModal(true)} className="mt-8 bg-teal-500 text-white font-bold py-3 px-6 rounded-full hover:bg-teal-600 transition-colors duration-300">
           Lamar Sekarang
         </button>
@@ -177,7 +222,7 @@ const JobDetail = ({ job, onBack }) => {
         <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full flex justify-center items-center z-50">
           <div className="relative bg-white p-8 rounded-xl shadow-xl max-w-lg w-full">
             <h3 className="text-2xl font-bold mb-4">Formulir Lamaran</h3>
-            <ApplicationForm job={job} />
+            <ApplicationForm job={job} onClose={() => setShowModal(false)} />
           </div>
         </div>
       )}
