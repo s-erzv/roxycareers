@@ -1,67 +1,5 @@
 # applications/auto_screening.py
 import re
-import io
-import PyPDF2
-from docx import Document
-import spacy
-
-# Load model spaCy untuk ekstraksi entitas
-try:
-    nlp = spacy.load("en_core_web_sm")
-except OSError:
-    print("Downloading spaCy model 'en_core_web_sm'...")
-    from spacy.cli import download
-    download("en_core_web_sm")
-    nlp = spacy.load("en_core_web_sm")
-
-def extract_text_from_pdf(pdf_file_bytes):
-    text = ""
-    try:
-        pdf_file = io.BytesIO(pdf_file_bytes)
-        reader = PyPDF2.PdfReader(pdf_file)
-        for page in reader.pages:
-            text += page.extract_text()
-    except Exception as e:
-        print(f"Error reading PDF: {e}")
-        return None
-    return text
-
-def extract_text_from_docx(docx_file_bytes):
-    text = ""
-    try:
-        docx_file = io.BytesIO(docx_file_bytes)
-        doc = Document(docx_file)
-        for paragraph in doc.paragraphs:
-            text += paragraph.text + '\n'
-    except Exception as e:
-        print(f"Error reading DOCX: {e}")
-        return None
-    return text
-
-def parse_cv_text(text):
-    if not text:
-        return {}
-    doc = nlp(text)
-    parsed_data = {
-        "education": [],
-        "experience_years": 0,
-        "location": None
-    }
-    experience_pattern = re.compile(r'(\d+)\s+(tahun|year)s?\s+experience', re.IGNORECASE)
-    locations_in_text = []
-    experience_match = experience_pattern.search(text)
-    if experience_match:
-        parsed_data['experience_years'] = int(experience_match.group(1))
-    for ent in doc.ents:
-        if ent.label_ == "GPE":
-            locations_in_text.append(ent.text)
-    if locations_in_text:
-        parsed_data['location'] = locations_in_text[0]
-    education_keywords = ["universitas", "institut", "s1", "s2", "master", "sarjana"]
-    for sentence in text.split('\n'):
-        if any(keyword in sentence.lower() for keyword in education_keywords):
-            parsed_data['education'].append(sentence.strip())
-    return parsed_data
 
 def preprocess_answers(job_custom_fields, raw_answers):
     processed_answers = raw_answers.copy()
@@ -82,24 +20,43 @@ def preprocess_answers(job_custom_fields, raw_answers):
                 processed_answers[label] = str(raw_value).strip()
     return processed_answers
 
-def run_auto_screening(job_custom_fields, applicant_answers):
+def run_auto_screening(job_custom_fields, applicant_answers, ai_score=None):
     log_message = {
         "Lolos": [],
         "Tidak Lolos": [],
         "Review": []
     }
-    if not job_custom_fields:
-        log_message["Lolos"].append({"reason": "Tidak ada kriteria untuk dicek."})
-        return {'status': 'Lolos', 'log': log_message}
-    if not applicant_answers or not isinstance(applicant_answers, dict):
-        log_message["Tidak Lolos"].append({"reason": "Data jawaban applicant tidak valid."})
-        return {'status': 'Tidak Lolos', 'log': log_message}
+    
+    # Dapatkan ambang batas skor AI dari custom fields lowongan
+    ai_score_threshold = 70  # Nilai default jika tidak ada di kriteria
+    for field in job_custom_fields:
+        if field.get('label') == 'ai_score_threshold' and field.get('criteria'):
+            try:
+                ai_score_threshold = float(field['criteria'])
+                break
+            except (ValueError, TypeError):
+                pass
+
+    # Periksa skor AI
+    if ai_score is not None:
+        log_message["Lolos"].append({"reason": f"Skor AI berhasil dihitung: {ai_score}"})
+        if ai_score < ai_score_threshold:
+            log_message["Tidak Lolos"].append({"reason": f"Skor AI ({ai_score}) di bawah ambang batas ({ai_score_threshold})."})
+    else:
+        log_message["Review"].append({"reason": "Tidak ada skor AI yang tersedia."})
+
+    # Lanjutkan dengan logika evaluasi kriteria lainnya
     for criteria_item in job_custom_fields:
         label = criteria_item['label']
         criteria = criteria_item.get('criteria', '')
         criteria_type = criteria_item['type']
         required = criteria_item.get('required', False)
         applicant_answer = applicant_answers.get(label)
+        
+        # Lewati kriteria AI Score Threshold
+        if label == 'ai_score_threshold':
+            continue
+
         if required and (applicant_answer is None or applicant_answer == ''):
             log_message["Tidak Lolos"].append({
                 "reason": f"Jawaban untuk {label} tidak ditemukan atau kosong."
@@ -112,6 +69,8 @@ def run_auto_screening(job_custom_fields, applicant_answers):
                 "reason": f"Kriteria untuk {label} tidak didefinisikan."
             })
             continue
+
+        # Logika untuk kriteria 'number'
         if criteria_type == 'number':
             result = evaluate_number_criteria(applicant_answer, criteria, label)
             if result['status'] == 'pass':
@@ -120,20 +79,30 @@ def run_auto_screening(job_custom_fields, applicant_answers):
                 log_message["Tidak Lolos"].append({"reason": result['reason']})
             elif result['status'] == 'error':
                 log_message["Review"].append({"reason": result['reason']})
+        # Logika untuk kriteria 'text' (contoh: lokasi)
         elif criteria_type == 'text':
             result = evaluate_text_criteria(applicant_answer, criteria, label)
             if result['status'] == 'pass':
                 log_message["Lolos"].append({"reason": result['reason']})
             elif result['status'] == 'fail':
                 log_message["Tidak Lolos"].append({"reason": result['reason']})
+        # Logika untuk kriteria 'boolean'
         elif criteria_type == 'boolean':
             result = evaluate_boolean_criteria(applicant_answer, criteria, label)
             if result['status'] == 'pass':
                 log_message["Lolos"].append({"reason": result['reason']})
             elif result['status'] == 'fail':
                 log_message["Tidak Lolos"].append({"reason": result['reason']})
-    status = 'Lolos' if not log_message["Tidak Lolos"] else 'Tidak Lolos'
-    return {'status': status, 'log': log_message}
+    
+    # Tentukan status akhir
+    if log_message["Tidak Lolos"]:
+        status = 'Tidak Lolos'
+    elif log_message["Review"]:
+        status = 'Needs Review'
+    else:
+        status = 'Lolos'
+        
+    return {'status': status, 'log': log_message, 'ai_score': ai_score}
 
 def evaluate_number_criteria(applicant_answer, criteria, label):
     try:

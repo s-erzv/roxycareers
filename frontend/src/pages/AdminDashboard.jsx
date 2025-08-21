@@ -6,30 +6,8 @@ import SchedulingForm from '../components/SchedulingForm';
 import { useNavigate } from 'react-router-dom';
 import JobFormPage from './JobFormPage';
 
-// Fungsi untuk memanggil rescreening dari backend
-const handleRescreening = async (applicantId) => {
-  try {
-    const response = await fetch('http://localhost:8000/api/rescreen-applicant', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ applicant_id: applicantId }),
-    });
-
-    if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.error);
-    }
-    
-    alert('Rescreening berhasil! Status pelamar akan diperbarui.');
-  } catch (error) {
-    alert('Gagal melakukan rescreening: ' + error.message);
-  }
-};
-
 // Komponen untuk menampilkan daftar pelamar
-const ApplicantsList = ({ job, applicants, onBack, onDownloadFile, onUpdateStatus, onSelectApplicant }) => (
+const ApplicantsList = ({ job, applicants, onBack, onDownloadFile, onUpdateStatus, onSelectApplicant, onRescreen }) => (
   <div className="p-8">
     <button onClick={onBack} className="flex items-center text-gray-600 hover:text-gray-900 transition-colors duration-200">
       <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -79,7 +57,7 @@ const ApplicantsList = ({ job, applicants, onBack, onDownloadFile, onUpdateStatu
                     Lihat Detail
                   </button>
                   <button
-                    onClick={() => handleRescreening(applicant.id)}
+                    onClick={() => onRescreen(applicant.id)}
                     className="text-sm text-yellow-500 hover:text-yellow-700 font-semibold"
                   >
                     Rescreen
@@ -105,6 +83,48 @@ export default function AdminDashboard() {
   const [selectedJob, setSelectedJob] = useState(null);
   const [selectedApplicant, setSelectedApplicant] = useState(null);
   const navigate = useNavigate();
+
+  // Fungsi untuk memanggil rescreening dari backend
+  const handleRescreening = async (applicantId, onRescreenSuccess) => {
+    try {
+      const response = await fetch('http://localhost:8000/api/rescreen-applicant', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ applicant_id: applicantId }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error);
+      }
+      
+      alert('Rescreening berhasil! Status pelamar akan diperbarui.');
+      // Panggil callback yang dikirimkan dari komponen utama
+      if (onRescreenSuccess) {
+        onRescreenSuccess(); 
+      }
+    } catch (error) {
+      alert('Gagal melakukan rescreening: ' + error.message);
+    }
+  };
+
+  const handleRescreeningAndRefresh = async (applicantId) => {
+    await handleRescreening(applicantId, () => {
+      // Callback untuk memuat ulang data pelamar setelah rescreening berhasil
+      if (selectedJob) {
+        fetchApplicants(selectedJob.id);
+      }
+    });
+  };
+
+  // Function to go back to jobs list
+  const handleBackToJobs = () => {
+    setView('list');
+    setSelectedJob(null);
+    setSelectedApplicant(null);
+  };
 
   const fetchJobs = async () => {
     setLoading(true);
@@ -258,17 +278,18 @@ export default function AdminDashboard() {
       );
     } else if (view === 'applicantsList') {
       return (
-        <ApplicantsList
+       <ApplicantsList
           job={selectedJob}
           applicants={applicants}
-          onBack={() => setView('list')}
+          onBack={handleBackToJobs}  
           onDownloadFile={handleDownloadFile}
           onUpdateStatus={handleUpdateApplicantStatus}
           onSelectApplicant={(applicant) => {
             setSelectedApplicant(applicant);
             setView('applicantDetail');
-          }}
-        />
+          }} 
+          onRescreen={handleRescreeningAndRefresh}
+        />      
       );
     } else {
       return (
