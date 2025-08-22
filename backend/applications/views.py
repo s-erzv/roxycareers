@@ -224,7 +224,8 @@ def rescreen_applicant(request):
                 supabase.from_('applicants').update({
                     'auto_screening_status': new_status,
                     'auto_screening_log': screening_result['log'],
-                    'ai_score': ai_score['score']
+                    # Bulatkan skor AI ke integer terdekat sebelum menyimpan
+                    'ai_score': int(round(ai_score['score']))
                 }).eq('id', applicant_id).execute()
                 print("[RESCREEN] Berhasil: Status pelamar berhasil diperbarui.")
             except PostgrestAPIError as e:
@@ -232,7 +233,7 @@ def rescreen_applicant(request):
                 return JsonResponse({'error': f'Failed to update applicant status: {e.message}'}, status=500)
                 
             print("[RESCREEN] Rescreening berhasil diproses.")
-            return JsonResponse({'message': 'Auto-screening completed successfully.', 'new_status': new_status, 'ai_score': ai_score['score']})
+            return JsonResponse({'message': 'Auto-screening completed successfully.', 'new_status': new_status, 'ai_score': int(round(ai_score['score']))})
         
         except Exception as e:
             print(f"[RESCREEN] Terjadi kesalahan tak terduga: {e}")

@@ -274,6 +274,7 @@ export default function JobForm({ onClose, onJobAdded, jobToEdit }) {
                   <option value="text">Teks</option>
                   <option value="number">Angka</option>
                   <option value="boolean">Boolean</option>
+                  <option value="dropdown">Dropdown</option>
                 </select>
               </div>
               <div className="flex-grow-2">
@@ -288,6 +289,20 @@ export default function JobForm({ onClose, onJobAdded, jobToEdit }) {
                   required
                 />
               </div>
+              {field.type === 'dropdown' && (
+                <div className="flex-grow-2">
+                  <label className="block text-gray-700 text-xs font-bold mb-1">Opsi Dropdown</label>
+                  <input
+                    type="text"
+                    name="options"
+                    value={field.options || ''}
+                    onChange={(e) => handleCustomFieldChange(index, e)}
+                    placeholder="Contoh: 'Pria, Wanita'"
+                    className="w-full p-2 border rounded-lg"
+                    required
+                  />
+                </div>
+              )}
               <div className="flex items-center">
                 <input
                   type="checkbox"

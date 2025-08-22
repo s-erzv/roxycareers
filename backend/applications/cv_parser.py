@@ -87,7 +87,7 @@ def parse_cv_text(text):
         "location": None,
         "skills": [],
         "projects_count": 0,
-        "certifications": [] # Ditambahkan untuk menyimpan sertifikasi yang diekstrak
+        "certifications": []
     }
     
     # Ekstraksi Pengalaman Kerja
