@@ -11,11 +11,15 @@ export default function JobFormPage({ onJobAdded }) {
     navigate('/admin');
   };
 
+   const handleJobAddedSuccessfully = () => {
+    console.log("Job has been successfully added!");
+  };
+
   return (
     <div className="p-8">
       <JobForm 
         onClose={handleClose} 
-        onJobAdded={onJobAdded} 
+        onJobAdded={handleJobAddedSuccessfully}
         jobToEdit={jobToEdit} // Sekarang jobToEdit sudah terisi
       />
     </div>

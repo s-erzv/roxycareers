@@ -27,6 +27,9 @@ def run_auto_screening(job_custom_fields, applicant_answers, ai_score=None):
         "Review": []
     }
     
+    final_score = 0
+    print("\n[AUTO-SCREENING] Memulai proses screening otomatis...")
+
     # Dapatkan ambang batas skor AI dari custom fields lowongan
     ai_score_threshold = 70  # Nilai default jika tidak ada di kriteria
     for field in job_custom_fields:
@@ -36,17 +39,32 @@ def run_auto_screening(job_custom_fields, applicant_answers, ai_score=None):
                 break
             except (ValueError, TypeError):
                 pass
-
-    # Periksa skor AI
+                
+    # Periksa skor AI dan inisialisasi skor akhir
     if ai_score is not None:
-        log_message["Lolos"].append({"reason": f"Skor AI berhasil dihitung: {ai_score}"})
+        final_score = ai_score
+        print(f"[AUTO-SCREENING] Skor AI: {ai_score} (Ambang Batas: {ai_score_threshold})")
         if ai_score < ai_score_threshold:
             log_message["Tidak Lolos"].append({"reason": f"Skor AI ({ai_score}) di bawah ambang batas ({ai_score_threshold})."})
+        else:
+            log_message["Lolos"].append({"reason": f"Skor AI ({ai_score}) memenuhi ambang batas."})
     else:
-        log_message["Review"].append({"reason": "Tidak ada skor AI yang tersedia."})
+        log_message["Review"].append({"reason": "Tidak ada skor AI yang tersedia, tidak dapat mengevaluasi kriteria CV."})
 
-    # Lanjutkan dengan logika evaluasi kriteria lainnya
-    for criteria_item in job_custom_fields:
+    # Filter kriteria, hanya proses yang memiliki is_auto=True
+    screening_criteria = [
+        field for field in job_custom_fields
+        if field.get('is_auto', False) and field.get('criteria')
+    ]
+    
+    # Hitung nilai poin per kriteria yang terpenuhi
+    num_screening_criteria = len(screening_criteria)
+    points_per_criteria = 0
+    if num_screening_criteria > 0:
+      points_per_criteria = 10 / num_screening_criteria
+
+    # Lanjutkan dengan logika evaluasi kriteria lainnya dan tambahkan poin
+    for criteria_item in screening_criteria:
         label = criteria_item['label']
         criteria = criteria_item.get('criteria', '')
         criteria_type = criteria_item['type']
@@ -57,6 +75,10 @@ def run_auto_screening(job_custom_fields, applicant_answers, ai_score=None):
         if label == 'ai_score_threshold':
             continue
 
+        print(f"[AUTO-SCREENING] Mengevaluasi kriteria: {label}")
+
+        is_passed = False
+        
         if required and (applicant_answer is None or applicant_answer == ''):
             log_message["Tidak Lolos"].append({
                 "reason": f"Jawaban untuk {label} tidak ditemukan atau kosong."
@@ -75,6 +97,7 @@ def run_auto_screening(job_custom_fields, applicant_answers, ai_score=None):
             result = evaluate_number_criteria(applicant_answer, criteria, label)
             if result['status'] == 'pass':
                 log_message["Lolos"].append({"reason": result['reason']})
+                is_passed = True
             elif result['status'] == 'fail':
                 log_message["Tidak Lolos"].append({"reason": result['reason']})
             elif result['status'] == 'error':
@@ -84,6 +107,7 @@ def run_auto_screening(job_custom_fields, applicant_answers, ai_score=None):
             result = evaluate_text_criteria(applicant_answer, criteria, label)
             if result['status'] == 'pass':
                 log_message["Lolos"].append({"reason": result['reason']})
+                is_passed = True
             elif result['status'] == 'fail':
                 log_message["Tidak Lolos"].append({"reason": result['reason']})
         # Logika untuk kriteria 'boolean'
@@ -91,9 +115,15 @@ def run_auto_screening(job_custom_fields, applicant_answers, ai_score=None):
             result = evaluate_boolean_criteria(applicant_answer, criteria, label)
             if result['status'] == 'pass':
                 log_message["Lolos"].append({"reason": result['reason']})
+                is_passed = True
             elif result['status'] == 'fail':
                 log_message["Tidak Lolos"].append({"reason": result['reason']})
     
+        if is_passed:
+            point_gain = points_per_criteria
+            final_score += point_gain
+            print(f"[AUTO-SCREENING] Kriteria '{label}' terpenuhi! Menambahkan {point_gain} poin. Skor saat ini: {final_score}")
+
     # Tentukan status akhir
     if log_message["Tidak Lolos"]:
         status = 'Tidak Lolos'
@@ -102,7 +132,10 @@ def run_auto_screening(job_custom_fields, applicant_answers, ai_score=None):
     else:
         status = 'Lolos'
         
-    return {'status': status, 'log': log_message, 'ai_score': ai_score}
+    print(f"[AUTO-SCREENING] Proses selesai. Status akhir: {status}")
+    print(f"[AUTO-SCREENING] Skor total final: {final_score}")
+
+    return {'status': status, 'log': log_message, 'ai_score': ai_score, 'final_score': final_score}
 
 def evaluate_number_criteria(applicant_answer, criteria, label):
     try:

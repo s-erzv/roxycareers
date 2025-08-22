@@ -56,9 +56,46 @@ const ApplicantDetail = ({ applicant, onBack, onDownloadFile, onUpdateStatus }) 
               Screening: {applicant.auto_screening_status}
             </span>
           </div>
-          {applicant.auto_screening_log && applicant.auto_screening_log['Tidak Lolos']?.length > 0 && (
-            <div className="mt-2 text-xs text-red-500">
-              <strong>Catatan:</strong> {applicant.auto_screening_log['Tidak Lolos'].map(log => log.reason).join(' | ')}
+
+          <div className="mt-4 p-4 bg-gray-50 rounded-lg">
+            <h5 className="font-semibold text-gray-800 mb-2">Detail Skor</h5>
+            <p className="text-sm"><strong>Skor AI:</strong> {applicant.ai_score ?? '-'}</p>
+            <p className="text-sm"><strong>Skor Total Final:</strong> {applicant.final_score ?? '-'}</p>
+          </div>
+
+          {applicant.auto_screening_log && (
+            <div className="mt-4 p-4 bg-gray-50 rounded-lg">
+              <h5 className="font-semibold text-gray-800 mb-2">Log Screening Otomatis</h5>
+              {applicant.auto_screening_log['Lolos']?.length > 0 && (
+                <div className="mt-2">
+                  <h6 className="text-sm font-medium text-green-700">✅ Lolos</h6>
+                  <ul className="text-xs text-gray-700 list-disc list-inside mt-1">
+                    {applicant.auto_screening_log['Lolos'].map((log, index) => (
+                      <li key={index}>{log.reason}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              {applicant.auto_screening_log['Tidak Lolos']?.length > 0 && (
+                <div className="mt-2">
+                  <h6 className="text-sm font-medium text-red-700">❌ Tidak Lolos</h6>
+                  <ul className="text-xs text-gray-700 list-disc list-inside mt-1">
+                    {applicant.auto_screening_log['Tidak Lolos'].map((log, index) => (
+                      <li key={index}>{log.reason}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              {applicant.auto_screening_log['Review']?.length > 0 && (
+                <div className="mt-2">
+                  <h6 className="text-sm font-medium text-yellow-700">⚠️ Butuh Review</h6>
+                  <ul className="text-xs text-gray-700 list-disc list-inside mt-1">
+                    {applicant.auto_screening_log['Review'].map((log, index) => (
+                      <li key={index}>{log.reason}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -78,10 +115,10 @@ const ApplicantDetail = ({ applicant, onBack, onDownloadFile, onUpdateStatus }) 
             {applicant.uploaded_files && applicant.uploaded_files.map((file, index) => (
               <li key={index}>
                 <button
-                  onClick={() => onDownloadFile(file.split(': ')[1])}
+                  onClick={() => onDownloadFile(file)}
                   className="text-sm text-teal-600 hover:underline"
                 >
-                  {file.split(': ')[0]} ({file.split('/').pop()})
+                  {file.split('/').pop()}
                 </button>
               </li>
             ))}

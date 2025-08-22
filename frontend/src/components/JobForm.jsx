@@ -1,4 +1,3 @@
-// JobForm.jsx
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
@@ -21,8 +20,20 @@ export default function JobForm({ onClose, onJobAdded, jobToEdit }) {
     assessment_details: null
   });
 
+  const templateFields = [
+    { label: 'name', type: 'text', criteria: '', required: true, is_default: true, is_auto: false },
+    { label: 'email', type: 'text', criteria: '', required: true, is_default: true, is_auto: false },
+    { label: 'phone_number', type: 'text', criteria: '', required: true, is_default: true, is_auto: false },
+    { label: 'CV', type: 'file', criteria: '', required: true, is_default: true, is_auto: true },
+    { label: 'resume_category', type: 'text', criteria: '', required: false, is_default: false, is_auto: true }
+  ];
+
   useEffect(() => {
     if (jobToEdit) {
+      const customFieldsOnly = jobToEdit.custom_fields.filter(field => 
+        !templateFields.some(templateField => templateField.label === field.label)
+      );
+      
       setFormData({
         title: jobToEdit.title ?? '',
         company: jobToEdit.company ?? '',
@@ -31,14 +42,13 @@ export default function JobForm({ onClose, onJobAdded, jobToEdit }) {
         type: jobToEdit.type ?? '',
         level: jobToEdit.level ?? '',
         description: jobToEdit.description ?? '',
-        custom_fields: jobToEdit.custom_fields ?? [],
+        custom_fields: customFieldsOnly,
         apply_deadline: jobToEdit.apply_deadline ?? '',
         recruitment_process_type: jobToEdit.recruitment_process_type ?? '',
         interview_details: jobToEdit.interview_details ?? null,
         assessment_details: jobToEdit.assessment_details ?? null,
       });
     } else {
-      // Mereset form dan menambahkan custom field untuk kategori resume secara default
       setFormData({
         title: '',
         company: '',
@@ -47,14 +57,7 @@ export default function JobForm({ onClose, onJobAdded, jobToEdit }) {
         type: '',
         level: '',
         description: '',
-        // Tambahkan custom field 'resume_category' secara otomatis saat form dibuat
-        custom_fields: [{
-          label: 'resume_category',
-          type: 'text',
-          criteria: '',
-          required: false,
-          is_auto: true // Flag untuk menandai field otomatis
-        }],
+        custom_fields: [],
         apply_deadline: '',
         recruitment_process_type: '',
         interview_details: null,
@@ -63,25 +66,22 @@ export default function JobForm({ onClose, onJobAdded, jobToEdit }) {
     }
   }, [jobToEdit]);
 
-  // Tambahkan fungsi ini untuk menangani perubahan pada custom fields
   const handleCustomFieldChange = (index, event) => {
     const newFields = [...formData.custom_fields];
     newFields[index][event.target.name] = event.target.value;
     setFormData({ ...formData, custom_fields: newFields });
   };
   
-  // Fungsi untuk menangani penambahan custom field baru
   const handleAddCustomField = () => {
     setFormData({
       ...formData,
       custom_fields: [
         ...formData.custom_fields,
-        { label: '', type: 'text', criteria: '', required: false, is_auto: false }
+        { label: '', type: 'text', criteria: '', required: false, is_default: false, is_auto: false }
       ],
     });
   };
   
-  // Fungsi untuk menghapus custom field
   const handleRemoveCustomField = (index) => {
     const newFields = formData.custom_fields.filter((_, i) => i !== index);
     setFormData({ ...formData, custom_fields: newFields });
@@ -103,27 +103,34 @@ export default function JobForm({ onClose, onJobAdded, jobToEdit }) {
     setFormData({ ...formData, custom_fields: newFields });
   };
 
+  const handleAutoScreenChange = (index) => {
+    const newFields = [...formData.custom_fields];
+    const isCurrentlyAuto = newFields[index].is_auto;
+    newFields[index].is_auto = !isCurrentlyAuto;
+    if (isCurrentlyAuto) {
+      newFields[index].criteria = '';
+    }
+    setFormData({ ...formData, custom_fields: newFields });
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
 
     const { custom_fields, ...restOfData } = formData;
     
-    // Saring custom fields, hanya simpan yang tidak otomatis jika kriterianya kosong
-    const filteredCustomFields = custom_fields.filter(field =>
-      !field.is_auto || (field.is_auto && field.criteria.trim() !== '')
+    const filteredCustomFields = custom_fields.filter(field => 
+      !(field.is_auto && (!field.criteria || field.criteria.trim() === ''))
     );
     
-    // Hapus is_auto flag sebelum dikirim
-    const finalCustomFields = filteredCustomFields.map(({ is_auto, ...field }) => field);
-
+    // Perbaikan utama: Mengirim semua properti bidang, termasuk is_auto dan is_default
+    const allFields = [...templateFields, ...filteredCustomFields];
+    
     const dataToSave = {
       ...restOfData,
-      custom_fields: finalCustomFields,
+      custom_fields: allFields,
     };
     
-    //console.log("Data yang akan disimpan:", dataToSave);
-
     try {
       if (jobToEdit) {
         await supabase.from('jobs').update(dataToSave).eq('id', jobToEdit.id);
@@ -245,93 +252,161 @@ export default function JobForm({ onClose, onJobAdded, jobToEdit }) {
         </div>
 
         <div className="bg-gray-50 p-4 rounded-lg">
-          <h4 className="text-lg font-bold text-gray-800 mb-4">Kriteria Screening Tambahan</h4>
-          {formData.custom_fields.map((field, index) => (
-            <div key={index} className="flex items-center space-x-4 mb-4 p-4 border rounded-lg bg-white">
-              <div className="flex-grow">
-                <label className="block text-gray-700 text-xs font-bold mb-1">Label Kriteria</label>
-                <input
-                  type="text"
-                  name="label"
-                  value={field.label}
-                  onChange={(e) => handleCustomFieldChange(index, e)}
-                  placeholder="Misal: education_level"
-                  className={`w-full p-2 border rounded-lg ${field.is_auto ? 'bg-gray-100 cursor-not-allowed' : ''}`}
-                  required
-                  disabled={field.is_auto} // Disable input for auto fields
-                />
-              </div>
-              <div className="flex-grow">
-                <label className="block text-gray-700 text-xs font-bold mb-1">Tipe</label>
-                <select
-                  name="type"
-                  value={field.type}
-                  onChange={(e) => handleCustomFieldChange(index, e)}
-                  className={`w-full p-2 border rounded-lg ${field.is_auto ? 'bg-gray-100 cursor-not-allowed' : ''}`}
-                  required
-                  disabled={field.is_auto}
-                >
-                  <option value="text">Teks</option>
-                  <option value="number">Angka</option>
-                  <option value="boolean">Boolean</option>
-                  <option value="dropdown">Dropdown</option>
-                </select>
-              </div>
-              <div className="flex-grow-2">
-                <label className="block text-gray-700 text-xs font-bold mb-1">Kriteria</label>
-                <input
-                  type="text"
-                  name="criteria"
-                  value={field.criteria}
-                  onChange={(e) => handleCustomFieldChange(index, e)}
-                  placeholder="Contoh: 'S1, S2' (Teks), '>=3' (Angka)"
-                  className="w-full p-2 border rounded-lg"
-                  required
-                />
-              </div>
-              {field.type === 'dropdown' && (
-                <div className="flex-grow-2">
-                  <label className="block text-gray-700 text-xs font-bold mb-1">Opsi Dropdown</label>
-                  <input
-                    type="text"
-                    name="options"
-                    value={field.options || ''}
-                    onChange={(e) => handleCustomFieldChange(index, e)}
-                    placeholder="Contoh: 'Pria, Wanita'"
-                    className="w-full p-2 border rounded-lg"
-                    required
-                  />
-                </div>
+          <h4 className="text-lg font-bold text-gray-800 mb-4">Kriteria Screening</h4>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            
+            <div>
+              <h5 className="text-md font-semibold text-gray-700 mb-3">Kriteria Tambahan</h5>
+              {formData.custom_fields.length > 0 ? (
+                formData.custom_fields.map((field, index) => (
+                  <div key={index} className="flex flex-col space-y-2 mb-4 p-3 border rounded-lg bg-white">
+                    <div className="flex space-x-2">
+                      <div className="flex-1">
+                        <label className="block text-gray-700 text-xs font-bold mb-1">Label</label>
+                        <input
+                          type="text"
+                          name="label"
+                          value={field.label}
+                          onChange={(e) => handleCustomFieldChange(index, e)}
+                          placeholder="Misal: education_level"
+                          className="w-full p-2 border rounded-lg text-sm"
+                          required
+                        />
+                      </div>
+                      <div className="flex-1">
+                        <label className="block text-gray-700 text-xs font-bold mb-1">Tipe</label>
+                        <select
+                          name="type"
+                          value={field.type}
+                          onChange={(e) => handleCustomFieldChange(index, e)}
+                          className="w-full p-2 border rounded-lg text-sm"
+                          required
+                        >
+                          <option value="text">Teks</option>
+                          <option value="number">Angka</option>
+                          <option value="boolean">Boolean</option>
+                          <option value="dropdown">Dropdown</option>
+                          <option value="file">Upload File</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center space-x-4">
+                      <div className="flex items-center">
+                        <input
+                          type="checkbox"
+                          name="is_auto"
+                          checked={field.is_auto}
+                          onChange={() => handleAutoScreenChange(index)}
+                          className="mr-1 h-3 w-3 text-blue-600 rounded"
+                        />
+                        <label className="text-gray-700 text-xs font-semibold">Auto-Screening</label>
+                      </div>
+                      <div className="flex items-center">
+                        <input
+                          type="checkbox"
+                          name="required"
+                          checked={field.required}
+                          onChange={() => handleCheckboxChange(index)}
+                          className="mr-1 h-3 w-3 text-teal-600 rounded"
+                        />
+                        <label className="text-gray-700 text-xs font-semibold">Wajib</label>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveCustomField(index)}
+                        className="p-1 text-red-500 hover:text-red-700 transition-colors duration-200"
+                      >
+                        <FontAwesomeIcon icon={faTrash} size="sm" />
+                      </button>
+                    </div>
+
+                    {field.is_auto && (
+                      <div className="flex-grow-2">
+                        <label className="block text-gray-700 text-xs font-bold mb-1">Kriteria</label>
+                        <input
+                          type="text"
+                          name="criteria"
+                          value={field.criteria}
+                          onChange={(e) => handleCustomFieldChange(index, e)}
+                          placeholder={
+                            field.type === 'text' ? "Contoh: 'S1, S2'" :
+                            field.type === 'number' ? "Contoh: '>=3', '1-5'" :
+                            field.type === 'boolean' ? "Contoh: 'true', 'false'" :
+                            field.type === 'file' ? "Contoh: 'max_size:5MB', 'required'" :
+                            "Masukkan kriteria"
+                          }
+                          className="w-full p-2 border rounded-lg text-sm"
+                          required={field.is_auto}
+                        />
+                      </div>
+                    )}
+
+                    {field.type === 'dropdown' && (
+                      <div className="flex-grow-2">
+                        <label className="block text-gray-700 text-xs font-bold mb-1">Opsi</label>
+                        <input
+                          type="text"
+                          name="options"
+                          value={field.options || ''}
+                          onChange={(e) => handleCustomFieldChange(index, e)}
+                          placeholder="Misal: 'Pria, Wanita'"
+                          className="w-full p-2 border rounded-lg text-sm"
+                        />
+                      </div>
+                    )}
+                    {field.type === 'file' && (
+                      <div className="flex-grow-2">
+                        <label className="block text-gray-700 text-xs font-bold mb-1">Format File</label>
+                        <input
+                          type="text"
+                          name="file_types"
+                          value={field.file_types || ''}
+                          onChange={(e) => handleCustomFieldChange(index, e)}
+                          placeholder="Misal: 'pdf, doc, docx'"
+                          className="w-full p-2 border rounded-lg text-sm"
+                        />
+                      </div>
+                    )}
+                  </div>
+                ))
+              ) : (
+                <p className="text-gray-500 text-sm mb-4">Belum ada kriteria tambahan</p>
               )}
-              <div className="flex items-center">
-                <input
-                  type="checkbox"
-                  name="required"
-                  checked={field.required}
-                  onChange={() => handleCheckboxChange(index)}
-                  className={`mr-2 h-4 w-4 text-teal-600 rounded ${field.is_auto ? 'cursor-not-allowed' : ''}`}
-                  disabled={field.is_auto}
-                />
-                <label className="text-gray-700 text-sm">Wajib</label>
-              </div>
-              {!field.is_auto && (
-                <button
-                  type="button"
-                  onClick={() => handleRemoveCustomField(index)}
-                  className="p-2 text-red-500 hover:text-red-700 transition-colors duration-200"
-                >
-                  <FontAwesomeIcon icon={faTrash} />
-                </button>
-              )}
+              <button
+                type="button"
+                onClick={handleAddCustomField}
+                className="w-full bg-gray-200 text-gray-800 py-2 px-4 rounded-lg hover:bg-gray-300 transition-colors duration-200"
+              >
+                + Tambah Kriteria Baru
+              </button>
             </div>
-          ))}
-          <button
-            type="button"
-            onClick={handleAddCustomField}
-            className="mt-2 bg-gray-200 text-gray-800 py-2 px-4 rounded-full hover:bg-gray-300 transition-colors duration-200"
-          >
-            + Tambah Kriteria
-          </button>
+
+            <div>
+              <h5 className="text-md font-semibold text-gray-700 mb-3">Kriteria Standar</h5>
+              {templateFields.map((field, index) => (
+                <div key={index} className="mb-4 p-3 border rounded-lg bg-white">
+                  <div className="flex flex-col space-y-2">
+                    <div className="flex space-x-2">
+                      <div className="flex-1">
+                        <label className="block text-gray-700 text-xs font-bold mb-1">Label</label>
+                        <div className="p-2 bg-gray-100 rounded border text-gray-700">
+                          {field.label}
+                        </div>
+                      </div>
+                      <div className="flex-1">
+                        <label className="block text-gray-700 text-xs font-bold mb-1">Tipe</label>
+                        <div className="p-2 bg-gray-100 rounded border text-gray-700">
+                          {field.type}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
 
         <div>

@@ -17,7 +17,7 @@ def apply(request):
             email = data.get('email')
             job_id = data.get('job_id')
             user_id = data.get('user_id')
-            uploaded_files = data.get('uploadedFiles')
+            uploaded_files = data.get('uploaded_files')
             company = data.get('company')
 
             custom_answers = data.get('custom_answers', {})
@@ -43,6 +43,7 @@ def apply(request):
             auto_screening_status = 'Pending'
             applicant_status = 'Applied'
             ai_score = None
+            final_score = None
 
             cv_path = None
             for file_path in uploaded_files:
@@ -53,12 +54,11 @@ def apply(request):
             if cv_path:
                 print(f"[APPLY] Mengunduh CV dari Supabase Storage: {cv_path}")
                 try:
-                    cv_file_path = cv_path.split('/')[-1]
-                    res = supabase.storage.from_('candidate-uploads').download(f'{user_id}/{cv_file_path}')
+                    res = supabase.storage.from_('candidate-uploads').download(cv_path)
                     
-                    if cv_file_path.endswith('.pdf'):
+                    if cv_path.endswith('.pdf'):
                         cv_text = extract_text_from_pdf(res)
-                    elif cv_file_path.endswith('.docx'):
+                    elif cv_path.endswith('.docx'):
                         cv_text = extract_text_from_docx(res)
                     
                     if cv_text:
@@ -78,6 +78,7 @@ def apply(request):
                             processed_answers = preprocess_answers(job_data['custom_fields'], combined_answers)
                             screening_result = run_auto_screening(job_data['custom_fields'], processed_answers, ai_score['score'])
                             auto_screening_status = screening_result['status']
+                            final_score = screening_result.get('final_score')
                             
                             if screening_result['status'] == 'Lolos':
                                 applicant_status = 'Shortlisted'
@@ -100,6 +101,7 @@ def apply(request):
                 combined_answers = custom_answers
                 screening_result = run_auto_screening(job_data['custom_fields'], combined_answers)
                 auto_screening_status = screening_result['status']
+                final_score = screening_result.get('final_score')
                 if screening_result['status'] == 'Lolos':
                     applicant_status = 'Shortlisted'
                 elif screening_result['status'] == 'Tidak Lolos':
@@ -108,6 +110,7 @@ def apply(request):
                     applicant_status = 'Needs Review'
             
             print(f"[APPLY] Hasil Screening Otomatis: {auto_screening_status}")
+            print(f"[APPLY] Total Skor Final: {final_score}")
             print(f"[APPLY] Detail Log: {screening_result.get('log')}")
 
             insert_data = {
@@ -121,8 +124,8 @@ def apply(request):
                 'custom_answers': custom_answers,
                 'auto_screening_status': auto_screening_status,
                 'auto_screening_log': screening_result['log'] if screening_result else {},
-                # Bulatkan skor AI ke integer terdekat sebelum menyimpan
-                'ai_score': int(round(ai_score['score'])) if ai_score and ai_score['score'] is not None else None
+                'ai_score': int(round(ai_score['score'])) if ai_score and ai_score['score'] is not None else None,
+                'final_score': int(round(final_score)) if final_score is not None else None
             }
             try:
                 print("[APPLY] Menyimpan data pelamar ke Supabase...")
@@ -170,24 +173,22 @@ def rescreen_applicant(request):
                 print(f"[RESCREEN] Gagal: Pelamar dengan ID '{applicant_id}' tidak ditemukan.")
                 return JsonResponse({'error': 'Applicant not found.'}, status=404)
             
-            print(f"[RESCREEN] Mengambil data CV untuk rescreening dari: {applicant_data.get('uploaded_files')}")
-
             cv_path = None
-            for file_path in applicant_data['uploaded_files']:
-                cv_path = file_path
-                break
+            if applicant_data.get('uploaded_files'):
+                cv_path = applicant_data['uploaded_files'][0]
             
             cv_text = None
             cv_data = {}
+            ai_score = None
+            final_score = None
             if cv_path:
                 try:
-                    cv_file_path = cv_path.split('/')[-1]
-                    user_id = applicant_data['user_id']
-                    res = supabase.storage.from_('candidate-uploads').download(f'{user_id}/{cv_file_path}')
+                    print(f"[RESCREEN] Mengunduh CV untuk rescreening dari: {cv_path}")
+                    res = supabase.storage.from_('candidate-uploads').download(cv_path)
                     
-                    if cv_file_path.endswith('.pdf'):
+                    if cv_path.endswith('.pdf'):
                         cv_text = extract_text_from_pdf(res)
-                    elif cv_file_path.endswith('.docx'):
+                    elif cv_path.endswith('.docx'):
                         cv_text = extract_text_from_docx(res)
                     
                     if cv_text:
@@ -212,6 +213,7 @@ def rescreen_applicant(request):
             screening_result = run_auto_screening(job_data['custom_fields'], combined_answers, ai_score['score'])
             
             new_status = screening_result['status']
+            final_score = screening_result.get('final_score')
             if new_status == 'Lolos':
                 applicant_status = 'Shortlisted'
             elif new_status == 'Tidak Lolos':
@@ -220,12 +222,12 @@ def rescreen_applicant(request):
                 applicant_status = 'Needs Review'
             
             try:
-                print(f"[RESCREEN] Memperbarui status pelamar menjadi '{new_status}' di Supabase...")
+                print(f"[RESCREEN] Memperbarui status pelamar menjadi '{new_status}' dan skor menjadi '{final_score}' di Supabase...")
                 supabase.from_('applicants').update({
                     'auto_screening_status': new_status,
                     'auto_screening_log': screening_result['log'],
-                    # Bulatkan skor AI ke integer terdekat sebelum menyimpan
-                    'ai_score': int(round(ai_score['score']))
+                    'ai_score': int(round(ai_score['score'])) if ai_score and ai_score['score'] is not None else None,
+                    'final_score': int(round(final_score)) if final_score is not None else None
                 }).eq('id', applicant_id).execute()
                 print("[RESCREEN] Berhasil: Status pelamar berhasil diperbarui.")
             except PostgrestAPIError as e:
@@ -233,7 +235,7 @@ def rescreen_applicant(request):
                 return JsonResponse({'error': f'Failed to update applicant status: {e.message}'}, status=500)
                 
             print("[RESCREEN] Rescreening berhasil diproses.")
-            return JsonResponse({'message': 'Auto-screening completed successfully.', 'new_status': new_status, 'ai_score': int(round(ai_score['score']))})
+            return JsonResponse({'message': 'Auto-screening completed successfully.', 'new_status': new_status, 'ai_score': int(round(ai_score['score'])), 'final_score': int(round(final_score))})
         
         except Exception as e:
             print(f"[RESCREEN] Terjadi kesalahan tak terduga: {e}")
