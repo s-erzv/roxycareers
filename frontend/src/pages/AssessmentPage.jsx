@@ -23,16 +23,22 @@ const AssessmentPage = ({ applicant, onBack }) => {
           throw new Error("Job ID is missing.");
         }
 
+        console.log('Fetching questions for job ID:', jobId);
+
         const response = await axios.get(`${import.meta.env.VITE_BACKEND_URL}/api/jobs/${jobId}/assessment-questions/`, {
           headers: {
             'Authorization': `Bearer ${session.access_token}`
           }
         });
         
+        console.log('Response data:', response.data);
+        
         if (response.data.questions && Array.isArray(response.data.questions)) {
           setQuestions(response.data.questions);
+          console.log('Questions set:', response.data.questions);
         } else {
           setQuestions([]);
+          console.warn('No questions found or invalid format');
         }
 
         const duration = response.data.duration;
@@ -71,40 +77,161 @@ const AssessmentPage = ({ applicant, onBack }) => {
     return () => clearInterval(timer);
   }, [timeRemaining, isSubmitting]);
 
-  const handleChange = (questionId, value) => {
-    setAnswers(prevAnswers => ({
-      ...prevAnswers,
-      [questionId]: value,
-    }));
+  const handleChange = (questionId, value, questionType) => {
+    if (questionType === 'MULTIPLE_CHOICE') {
+      // For multiple choice, handle array of selected values
+      const currentAnswers = answers[questionId] || [];
+      let newAnswers;
+      if (currentAnswers.includes(value)) {
+        newAnswers = currentAnswers.filter(answer => answer !== value);
+      } else {
+        newAnswers = [...currentAnswers, value];
+      }
+      setAnswers(prevAnswers => ({
+        ...prevAnswers,
+        [questionId]: newAnswers,
+      }));
+    } else {
+      setAnswers(prevAnswers => ({
+        ...prevAnswers,
+        [questionId]: value,
+      }));
+    }
   };
 
   const handleSubmit = async (e) => {
-        if (e) e.preventDefault();
-        setIsSubmitting(true);
-        setError(null);
+    if (e) e.preventDefault();
+    setIsSubmitting(true);
+    setError(null);
 
-        const submissionData = {
-        applicant_id: applicant.id,
-        job_id: applicant.jobs.id,
-        answers: answers
-        };
+    // Convert answers format to match backend expectations
+    const formattedAnswers = {};
+    Object.keys(answers).forEach(questionId => {
+      const question = questions.find(q => q.id === questionId);
+      if (question && question.question_type === 'MULTIPLE_CHOICE') {
+        // Convert array to JSON string for multiple choice
+        formattedAnswers[questionId] = JSON.stringify(answers[questionId] || []);
+      } else {
+        formattedAnswers[questionId] = answers[questionId];
+      }
+    });
 
-        try {
-        // Pastikan URL-nya benar
-        await axios.post(`${import.meta.env.VITE_BACKEND_URL}/api/applicants/submit-assessment/`, submissionData, {
-            headers: {
-            'Authorization': `Bearer ${session.access_token}`,
-            'Content-Type': 'application/json'
-            }
-        });
-        alert('Jawaban berhasil dikirim!');
-        onBack();
-        } catch (err) {
-        console.error("Failed to submit assessment:", err);
-        setError("Failed to submit your answers. Please check your connection and try again.");
-        setIsSubmitting(false);
-        }
+    const submissionData = {
+      answers: formattedAnswers
     };
+
+    try {
+      // Fix the URL to match your backend route
+      await axios.post(`${import.meta.env.VITE_BACKEND_URL}/api/applicants/${applicant.id}/submit-assessment/`, submissionData, {
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      alert('Jawaban berhasil dikirim!');
+      onBack();
+    } catch (err) {
+      console.error("Failed to submit assessment:", err);
+      setError("Failed to submit your answers. Please check your connection and try again.");
+      setIsSubmitting(false);
+    }
+  };
+
+  const renderQuestionInput = (question, index) => {
+    const questionId = question.id;
+    const questionType = question.question_type;
+    
+    switch (questionType) {
+      case 'SINGLE_CHOICE':
+        return (
+          <div className="space-y-2">
+            {question.options.map((option, optionIndex) => (
+              <label key={optionIndex} className="flex items-center space-x-2">
+                <input
+                  type="radio"
+                  name={`question_${questionId}`}
+                  value={option}
+                  checked={answers[questionId] === option}
+                  onChange={(e) => handleChange(questionId, e.target.value, questionType)}
+                  className="text-teal-600"
+                />
+                <span>{option}</span>
+              </label>
+            ))}
+          </div>
+        );
+      
+      case 'MULTIPLE_CHOICE':
+        return (
+          <div className="space-y-2">
+            {question.options.map((option, optionIndex) => (
+              <label key={optionIndex} className="flex items-center space-x-2">
+                <input
+                  type="checkbox"
+                  value={option}
+                  checked={(answers[questionId] || []).includes(option)}
+                  onChange={(e) => handleChange(questionId, e.target.value, questionType)}
+                  className="text-teal-600"
+                />
+                <span>{option}</span>
+              </label>
+            ))}
+          </div>
+        );
+      
+      case 'INTEGER_INPUT':
+        return (
+          <input
+            type="number"
+            className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            placeholder="Masukkan angka..."
+            value={answers[questionId] || ''}
+            onChange={(e) => handleChange(questionId, e.target.value, questionType)}
+            required
+          />
+        );
+      
+      case 'TEXT_INPUT':
+        return (
+          <input
+            type="text"
+            className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            placeholder="Masukkan jawaban Anda..."
+            value={answers[questionId] || ''}
+            onChange={(e) => handleChange(questionId, e.target.value, questionType)}
+            required
+          />
+        );
+      
+      case 'FILE_UPLOAD':
+        return (
+          <input
+            type="file"
+            className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            onChange={(e) => {
+              // Handle file upload - you might want to upload to Supabase storage here
+              const file = e.target.files[0];
+              if (file) {
+                handleChange(questionId, file.name, questionType); // For now, just store filename
+              }
+            }}
+          />
+        );
+      
+      case 'ESSAY':
+      case 'CODING_CHALLENGE':
+      default:
+        return (
+          <textarea
+            className="w-full h-32 p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            placeholder="Tulis jawaban Anda di sini..."
+            value={answers[questionId] || ''}
+            onChange={(e) => handleChange(questionId, e.target.value, questionType)}
+            required
+          />
+        );
+    }
+  };
 
   if (loading) {
     return (
@@ -144,16 +271,13 @@ const AssessmentPage = ({ applicant, onBack }) => {
         {questions && questions.length > 0 ? (
           questions.map((q, index) => (
             <div key={q.id} className="bg-white p-6 rounded-lg shadow">
-              <p className="text-lg font-semibold mb-2">
-                {index + 1}. {q.question_text}
+              <p className="text-lg font-semibold mb-4">
+                {index + 1}. {q.text} {/* FIXED: Changed from q.question_text to q.text */}
               </p>
-              <textarea
-                className="w-full h-32 p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                placeholder="Tulis jawaban Anda di sini..."
-                value={answers[q.id] || ''}
-                onChange={(e) => handleChange(q.id, e.target.value)}
-                required
-              />
+              <div className="mb-2 text-sm text-gray-600">
+                Jenis: {q.question_type}
+              </div>
+              {renderQuestionInput(q, index)}
             </div>
           ))
         ) : (

@@ -15,12 +15,216 @@ import logging
 import pytz
 from django.db import transaction
 from .models import Job, Applicant, Question, AssessmentAnswer, AssessmentTemplate
-from django.db.models import F
 
 logger = logging.getLogger(__name__)
 
 # Daftar jenis pertanyaan yang membutuhkan review manual
 MANUAL_REVIEW_TYPES = ['ESSAY', 'FILE_UPLOAD', 'CODING_CHALLENGE', 'TEXT_INPUT']
+
+@api_view(['GET'])
+def get_job_assessment_questions(request, job_id):
+    try:
+        print(f"\n=== DEBUG: get_job_assessment_questions called with job_id: {job_id} ===")
+        
+        # Step 1: Query the job
+        print("Step 1: Querying job from Supabase...")
+        job_response = supabase.from_('jobs').select('assessment_template_id, custom_fields, assessment_details').eq('id', job_id).execute()
+        
+        print(f"Raw job_response: {job_response}")
+        print(f"job_response.data: {job_response.data}")
+        print(f"job_response.data type: {type(job_response.data)}")
+        
+        # Step 2: Check if we got data
+        if not job_response.data:
+            print("No data returned from job query")
+            return Response({"error": "Job not found - no data returned."}, status=status.HTTP_404_NOT_FOUND)
+        
+        if not isinstance(job_response.data, list):
+            print(f"ERROR: Expected list but got {type(job_response.data)}")
+            return Response({"error": "Unexpected data format from database."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        
+        if len(job_response.data) == 0:
+            print("Empty list returned from job query")
+            return Response({"error": "Job not found - empty result."}, status=status.HTTP_404_NOT_FOUND)
+        
+        # Step 3: Extract first item
+        job_data = job_response.data[0]
+        print(f"Extracted job_data: {job_data}")
+        print(f"job_data type: {type(job_data)}")
+        
+        if not isinstance(job_data, dict):
+            print(f"ERROR: Expected dict but job_data is {type(job_data)}")
+            return Response({"error": "Invalid job data structure."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        
+        # Step 4: Initialize questions list
+        questions = []
+        print("Step 4: Initialized questions list")
+        
+        # Step 5: Get template questions
+        assessment_template_id = job_data.get('assessment_template_id')
+        print(f"Step 5: assessment_template_id = {assessment_template_id}")
+        
+        if assessment_template_id:
+            print(f"Fetching template questions for template_id: {assessment_template_id}")
+            try:
+                template_questions_response = supabase.from_('template_questions').select('question_id').eq('template_id', assessment_template_id).execute()
+                print(f"Template questions response: {template_questions_response.data}")
+                
+                if template_questions_response.data:
+                    template_question_ids = [q['question_id'] for q in template_questions_response.data]
+                    print(f"Template question IDs: {template_question_ids}")
+                    
+                    if template_question_ids:
+                        template_questions_data = supabase.from_('questions').select('*').in_('id', template_question_ids).execute()
+                        print(f"Template questions data: {template_questions_data.data}")
+                        if template_questions_data.data:
+                            questions.extend(template_questions_data.data)
+                            print(f"Added {len(template_questions_data.data)} template questions")
+                        
+            except Exception as template_error:
+                print(f"Error fetching template questions: {template_error}")
+                # Continue execution, don't fail the whole request
+        
+        # Step 6: Get custom questions
+        custom_fields = job_data.get('custom_fields')
+        print(f"Step 6: custom_fields = {custom_fields} (type: {type(custom_fields)})")
+        
+        if custom_fields:
+            if isinstance(custom_fields, dict):
+                custom_question_ids = custom_fields.get('custom_questions', [])
+                print(f"Custom question IDs: {custom_question_ids}")
+                
+                if custom_question_ids:
+                    try:
+                        custom_questions_data = supabase.from_('questions').select('*').in_('id', custom_question_ids).execute()
+                        print(f"Custom questions data: {custom_questions_data.data}")
+                        if custom_questions_data.data:
+                            questions.extend(custom_questions_data.data)
+                            print(f"Added {len(custom_questions_data.data)} custom questions")
+                    except Exception as custom_error:
+                        print(f"Error fetching custom questions: {custom_error}")
+            else:
+                print(f"custom_fields is not a dict, it's {type(custom_fields)}")
+        
+        # Step 7: Get duration
+        assessment_details = job_data.get('assessment_details')
+        print(f"Step 7: assessment_details = {assessment_details} (type: {type(assessment_details)})")
+        
+        duration = 60  # default
+        if assessment_details and isinstance(assessment_details, dict):
+            duration = assessment_details.get('duration', 60)
+        
+        print(f"Final duration: {duration}")
+        print(f"Final questions count: {len(questions)}")
+        
+        result = {
+            "questions": questions,
+            "duration": duration
+        }
+        
+        print(f"Returning result: {result}")
+        print("=== DEBUG END ===\n")
+        
+        return Response(result, status=status.HTTP_200_OK)
+
+    except PostgrestAPIError as e:
+        print(f"PostgrestAPIError: {e}")
+        logger.error(f"Error Supabase saat mengambil pertanyaan job: {e.message}")
+        return Response({"error": f"Error Supabase: {e.message}"}, status=500)
+    except Exception as e:
+        print(f"Unexpected error: {e}")
+        print(f"Error type: {type(e)}")
+        import traceback
+        traceback.print_exc()
+        logger.error(f"Error tak terduga: {e}", exc_info=True)
+        return Response({"error": f"Unexpected error: {str(e)}"}, status=500)
+
+# Fungsi-fungsi lainnya di views.py
+@api_view(['POST'])
+def submit_assessment(request, applicant_id):
+    try:
+        applicant_response = supabase.from_('applicants').select('*').eq('id', applicant_id).single().execute()
+        applicant_data = applicant_response.data
+        if not applicant_data:
+            return Response({"error": "Applicant not found."}, status=status.HTTP_404_NOT_FOUND)
+            
+        data = request.data
+        answers = data.get('answers', [])
+        
+        requires_manual_review = False
+        total_score = 0
+        total_questions = len(answers)
+
+        # Hapus jawaban lama untuk mencegah duplikasi
+        supabase.from_('assessment_answers').delete().eq('applicant_id', applicant_id).execute()
+        
+        answers_to_insert = []
+        
+        for question_id, answer_text in answers.items():
+            try:
+                question_response = supabase.from_('questions').select('question_type, solution').eq('id', question_id).single().execute()
+                question = question_response.data
+                if not question:
+                    return Response({"error": f"Question with ID {question_id} not found."}, status=status.HTTP_404_NOT_FOUND)
+            except PostgrestAPIError as e:
+                return Response({"error": f"Question with ID {question_id} not found."}, status=status.HTTP_404_NOT_FOUND)
+
+
+            answer_score = 0
+            is_correct = None
+
+            if question.get('question_type') in MANUAL_REVIEW_TYPES:
+                requires_manual_review = True
+                is_correct = None
+            elif question.get('question_type') == 'SINGLE_CHOICE' or question.get('question_type') == 'MULTIPLE_CHOICE':
+                if answer_text == question.get('solution'):
+                    is_correct = True
+                    answer_score = 100
+                else:
+                    is_correct = False
+            elif question.get('question_type') == 'INTEGER_INPUT':
+                try:
+                    submitted_value = int(answer_text)
+                    correct_value = int(question.get('solution'))
+                    if submitted_value == correct_value:
+                        is_correct = True
+                        answer_score = 100
+                    else:
+                        is_correct = False
+                except (ValueError, TypeError):
+                    is_correct = False
+                    answer_score = 0
+            
+            total_score += answer_score
+            
+            answers_to_insert.append({
+                'applicant_id': applicant_id,
+                'question_id': question_id,
+                'answer': answer_text,
+                'is_correct': is_correct,
+                'score': answer_score
+            })
+        
+        if answers_to_insert:
+            supabase.from_('assessment_answers').insert(answers_to_insert).execute()
+
+        new_status = 'Assessment - Completed'
+        if requires_manual_review:
+            new_status = 'Assessment - Needs Review'
+        
+        supabase.from_('applicants').update({
+            'status': new_status
+        }).eq('id', applicant_id).execute()
+        
+        return Response({
+            "message": "Assessment submitted successfully.",
+            "status": new_status,
+            "total_score_auto_graded": total_score
+        }, status=status.HTTP_201_CREATED)
+
+    except Exception as e:
+        logger.error(f"Error saat submit assessment: {e}")
+        return Response({"error": str(e)}, status=500)
 
 @csrf_exempt
 def apply(request):
@@ -512,51 +716,6 @@ def add_custom_question_to_job(request, job_id):
         logger.error(f"Error tak terduga: {e}")
         return Response({"error": str(e)}, status=500)
 
-# VIEW BARU: Mengambil Pertanyaan untuk Asesmen Job
-@api_view(['GET'])
-def get_job_assessment_questions(request, job_id):
-    try:
-        # Gunakan Django ORM untuk mengambil objek Job
-        job = Job.objects.select_related('assessment_template').prefetch_related('custom_questions', 'assessment_template__questions').get(id=job_id)
-        
-        questions = []
-
-        # Ambil pertanyaan dari template jika ada
-        if job.assessment_template:
-            template_questions = job.assessment_template.questions.all()
-            questions.extend(list(template_questions.values()))
-        
-        # Ambil pertanyaan khusus pekerjaan
-        custom_questions = job.custom_questions.all()
-        questions.extend(list(custom_questions.values()))
-        
-        # Karena di frontend butuh 'duration', kita perlu tambahkan.
-        # Jika tidak ada durasi spesifik di model, kita bisa pakai default.
-        # Asumsikan durasi disimpan di AssessmentTemplate atau Job
-        
-        duration = 60 # Default duration in minutes
-        if job.assessment_template:
-            # Asumsikan ada field 'duration' di AssessmentTemplate
-            duration = job.assessment_template.duration or 60
-        # Atau jika durasi per job:
-        # duration = job.duration_per_assessment or 60 
-
-        # Hapus duplikasi jika ada pertanyaan yang sama
-        unique_questions = {q['id']: q for q in questions}.values()
-        
-        # Kirim respons
-        return Response({
-            "questions": list(unique_questions),
-            "duration": duration
-        }, status=status.HTTP_200_OK)
-
-    except Job.DoesNotExist:
-        return Response({"error": "Job not found."}, status=status.HTTP_404_NOT_FOUND)
-    except Exception as e:
-        logger.error(f"Error tak terduga: {e}")
-        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-
 # Modifikasi fungsi submit_assessment
 @api_view(['POST'])
 def submit_assessment(request, applicant_id):
@@ -578,10 +737,7 @@ def submit_assessment(request, applicant_id):
         
         answers_to_insert = []
         
-        for answer_data in answers:
-            question_id = answer_data.get('question_id')
-            answer_text = answer_data.get('answer')
-            
+        for question_id, answer_text in answers.items():
             try:
                 question_response = supabase.from_('questions').select('question_type, solution').eq('id', question_id).single().execute()
                 question = question_response.data
