@@ -724,7 +724,10 @@ def add_custom_question_to_job(request, job_id):
 @api_view(['POST'])
 def submit_assessment(request, applicant_id):
     try:
-        applicant_response = supabase.from_('applicants').select('*').eq('id', str(applicant_id)).single().execute()
+        # Perbaikan: Pastikan applicant_id adalah string untuk menghindari error serialisasi
+        applicant_id_str = str(applicant_id)
+        
+        applicant_response = supabase.from_('applicants').select('*').eq('id', applicant_id_str).single().execute()
         applicant_data = applicant_response.data
         if not applicant_data:
             return Response({"error": "Applicant not found."}, status=status.HTTP_404_NOT_FOUND)
@@ -737,18 +740,22 @@ def submit_assessment(request, applicant_id):
         total_questions = len(answers)
 
         # Hapus jawaban lama untuk mencegah duplikasi
-        supabase.from_('assessment_answers').delete().eq('applicant_id', str(applicant_id)).execute()
+        supabase.from_('assessment_answers').delete().eq('applicant_id', applicant_id_str).execute()
         
         answers_to_insert = []
         
         for question_id, answer_text in answers.items():
+            # Perbaikan: Pastikan question_id adalah string
+            question_id_str = str(question_id)
+            
             try:
-                question_response = supabase.from_('questions').select('question_type, solution').eq('id', str(question_id)).single().execute()
+                question_response = supabase.from_('questions').select('question_type, solution').eq('id', question_id_str).single().execute()
                 question = question_response.data
                 if not question:
                     return Response({"error": f"Question with ID {question_id} not found."}, status=status.HTTP_404_NOT_FOUND)
             except PostgrestAPIError as e:
                 return Response({"error": f"Question with ID {question_id} not found."}, status=status.HTTP_404_NOT_FOUND)
+
 
             answer_score = 0
             is_correct = None
@@ -778,8 +785,8 @@ def submit_assessment(request, applicant_id):
             total_score += answer_score
             
             answers_to_insert.append({
-                'applicant_id': str(applicant_id),
-                'question_id': str(question_id),
+                'applicant_id': applicant_id_str, # Gunakan string
+                'question_id': question_id_str,   # Gunakan string
                 'answer': answer_text,
                 'is_correct': is_correct,
                 'score': answer_score
@@ -794,7 +801,7 @@ def submit_assessment(request, applicant_id):
         
         supabase.from_('applicants').update({
             'status': new_status
-        }).eq('id', str(applicant_id)).execute()
+        }).eq('id', applicant_id_str).execute()
         
         return Response({
             "message": "Assessment submitted successfully.",
@@ -806,7 +813,6 @@ def submit_assessment(request, applicant_id):
         logger.error(f"Error saat submit assessment: {e}")
         return Response({"error": str(e)}, status=500)
 
-# VIEW BARU: Endpoint untuk admin melihat jawaban dan menilai
 # VIEW BARU: Endpoint untuk admin melihat jawaban dan menilai
 @api_view(['GET', 'POST'])
 def review_assessment(request, applicant_id):
@@ -880,12 +886,23 @@ def review_assessment(request, applicant_id):
             
             final_score = int(final_score)  # Convert to integer
             
+            # Mendapatkan total jumlah pertanyaan untuk menghitung skor ambang batas
+            total_questions_response = supabase.from_('assessment_answers').select('question_id').eq('applicant_id', str(applicant_id)).execute()
+            total_questions = len(total_questions_response.data)
+            max_possible_score = total_questions * 100
+            passing_score_threshold = (2/3) * max_possible_score
+
+            if final_score >= passing_score_threshold:
+                new_status = 'Lolos Assessment'
+            else:
+                new_status = 'Gagal Assessment'
+            
             supabase.from_('applicants').update({
-                'status': 'Assessment - Reviewed',
+                'status': new_status,
                 'final_score': final_score
             }).eq('id', str(applicant_id)).execute()
                 
-            return Response({"message": "Manual review completed.", "final_score": final_score}, status=status.HTTP_200_OK)
+            return Response({"message": "Manual review completed.", "final_score": final_score, "new_status": new_status}, status=status.HTTP_200_OK)
     except Exception as e:
         logger.error(f"Error saat me-review assessment: {e}")
         return Response({"error": str(e)}, status=500)

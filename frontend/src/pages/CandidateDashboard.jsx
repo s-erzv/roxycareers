@@ -94,6 +94,10 @@ export default function CandidateDashboard() {
       case 'Assessment - Needs Review':
       case 'Assessment - Reviewed':
         return { label: 'Asesmen Selesai', color: 'bg-gray-400 text-white' };
+      case 'Lolos Assessment':
+        return { label: 'Lolos Asesmen', color: 'bg-green-500 text-white' };
+      case 'Gagal Assessment':
+        return { label: 'Gagal Asesmen', color: 'bg-red-500 text-white' };
       default:
         return { label: 'Status Tidak Diketahui', color: 'bg-gray-100 text-gray-800' };
     }
@@ -125,8 +129,15 @@ export default function CandidateDashboard() {
       {applications.length > 0 ? (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {applications.map(app => {
-            const statusDisplay = getStatusDisplay(app.status);
+            let currentStatus = app.status;
             const interviewTime = app.schedules && app.schedules.length > 0 ? new Date(app.schedules[0].interview_time) : null;
+            
+            // Logika untuk mengubah status tampilan secara dinamis
+            if (currentStatus === 'scheduled' && interviewTime && (new Date().getTime() > (interviewTime.getTime() + 60 * 60 * 1000))) {
+              currentStatus = 'Interviewed';
+            }
+
+            const statusDisplay = getStatusDisplay(currentStatus);
             const formattedDate = interviewTime ? interviewTime.toLocaleDateString('en-US') : '';
             const formattedTime = interviewTime ? interviewTime.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) : '';
 

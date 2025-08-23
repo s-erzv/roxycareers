@@ -52,6 +52,20 @@ const getStatusMessage = (status) => {
         color: 'bg-gray-400 text-white',
         actionMessage: ''
       };
+    case 'Lolos Assessment':
+      return {
+        title: 'Selamat, Anda Lolos Asesmen!',
+        message: 'Anda telah berhasil lolos asesmen. Kami akan menghubungi Anda kembali untuk langkah selanjutnya, yaitu penjadwalan interview.',
+        color: 'bg-green-500 text-white',
+        actionMessage: ''
+      };
+    case 'Gagal Assessment':
+      return {
+        title: 'Mohon Maaf, Anda Gagal Asesmen',
+        message: 'Kami mohon maaf, Anda belum berhasil lolos pada tahap asesmen kali ini. Terima kasih atas partisipasi Anda.',
+        color: 'bg-red-500 text-white',
+        actionMessage: ''
+      };
     default:
       return {
         title: 'Status Tidak Diketahui',
@@ -73,14 +87,20 @@ const createGoogleCalendarUrl = (title, startTime, endTime, details, location) =
 
 export default function ApplicationDetail({ application, onBack }) {
   const navigate = useNavigate();
-  const statusInfo = getStatusMessage(application.status);
   const jobs = application.jobs;
 
   const interviewTime = application.schedules && application.schedules.length > 0 ? new Date(application.schedules[0].interview_time) : null;
+  const interviewEndTime = interviewTime ? new Date(interviewTime.getTime() + 60 * 60 * 1000) : null;
+  
+  // Tentukan status yang ditampilkan
+  let displayedStatus = application.status;
+  if (application.status === 'scheduled' && interviewTime && (new Date().getTime() > interviewEndTime.getTime())) {
+    displayedStatus = 'Interviewed';
+  }
+
+  const statusInfo = getStatusMessage(displayedStatus);
   const formattedDate = interviewTime ? interviewTime.toLocaleDateString('en-US') : '';
   const formattedTime = interviewTime ? interviewTime.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) : '';
-  
-  const interviewEndTime = interviewTime ? new Date(interviewTime.getTime() + 60 * 60 * 1000) : null;
   
   const calendarTitle = `Interview - ${jobs.title} at ${jobs.company}`;
   const calendarDetails = `Jadwal Interview untuk posisi ${jobs.title} di ${jobs.company}.\n\nDetail:\n${jobs.interview_details?.link ? `Link: ${jobs.interview_details.link}\n` : ''}${jobs.interview_details?.contact_person ? `Kontak Person: ${jobs.interview_details.contact_person}\n` : ''}`;
