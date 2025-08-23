@@ -7,6 +7,10 @@ import axios from 'axios';
 export default function JobForm({ onClose, onJobAdded, jobToEdit }) {
   const [loading, setLoading] = useState(false);
   const [schedulingStatus, setSchedulingStatus] = useState(null);
+  const [templates, setTemplates] = useState([]);
+  const [selectedTemplate, setSelectedTemplate] = useState('');
+  const [customQuestions, setCustomQuestions] = useState([]);
+  const [newCustomQuestion, setNewCustomQuestion] = useState({ text: '', question_type: 'ESSAY' });
 
   const [formData, setFormData] = useState({
     title: '',
@@ -21,7 +25,6 @@ export default function JobForm({ onClose, onJobAdded, jobToEdit }) {
     recruitment_process_type: '',
     interview_details: null,
     assessment_details: null,
-    // Menambahkan state baru untuk parameter penjadwalan
     schedule_start_date: '',
     schedule_end_date: '',
     daily_start_time: '',
@@ -38,6 +41,16 @@ export default function JobForm({ onClose, onJobAdded, jobToEdit }) {
   ];
 
   useEffect(() => {
+    const fetchTemplates = async () => {
+        try {
+            const res = await axios.get('http://127.0.0.1:8000/api/assessment-templates/');
+            setTemplates(res.data);
+        } catch (error) {
+            console.error("Failed to fetch templates:", error);
+        }
+    };
+    fetchTemplates();
+    
     if (jobToEdit) {
       const customFieldsOnly = jobToEdit.custom_fields.filter(field =>
         !templateFields.some(templateField => templateField.label === field.label)
@@ -56,13 +69,15 @@ export default function JobForm({ onClose, onJobAdded, jobToEdit }) {
         recruitment_process_type: jobToEdit.recruitment_process_type ?? '',
         interview_details: jobToEdit.interview_details ?? null,
         assessment_details: jobToEdit.assessment_details ?? null,
-        // Mengisi state penjadwalan dari data pekerjaan
         schedule_start_date: jobToEdit.schedule_start_date ?? '',
         schedule_end_date: jobToEdit.schedule_end_date ?? '',
         daily_start_time: jobToEdit.daily_start_time ?? '',
         daily_end_time: jobToEdit.daily_end_time ?? '',
         duration_per_interview_minutes: jobToEdit.duration_per_interview_minutes ?? 60,
       });
+      setSelectedTemplate(jobToEdit.assessment_template || '');
+      // Asumsi custom_questions di jobToEdit adalah array of objects
+      setCustomQuestions(jobToEdit.custom_questions || []);
     } else {
       setFormData({
         title: '',
@@ -83,6 +98,8 @@ export default function JobForm({ onClose, onJobAdded, jobToEdit }) {
         daily_end_time: '',
         duration_per_interview_minutes: 60,
       });
+      setSelectedTemplate('');
+      setCustomQuestions([]);
     }
   }, [jobToEdit]);
 
@@ -145,6 +162,16 @@ export default function JobForm({ onClose, onJobAdded, jobToEdit }) {
     }
   };
 
+  const handleAddCustomQuestion = () => {
+      setCustomQuestions([...customQuestions, newCustomQuestion]);
+      setNewCustomQuestion({ text: '', question_type: 'ESSAY' });
+  };
+
+  const handleRemoveCustomQuestion = (index) => {
+      const updatedQuestions = customQuestions.filter((_, i) => i !== index);
+      setCustomQuestions(updatedQuestions);
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
@@ -156,12 +183,20 @@ export default function JobForm({ onClose, onJobAdded, jobToEdit }) {
     );
     const allFields = [...templateFields, ...filteredCustomFields];
 
-    const dataToSave = {
-      ...restOfData,
-      custom_fields: allFields,
-    };
-
     try {
+      const customQuestionIds = [];
+      for (const q of customQuestions) {
+          const res = await axios.post('http://127.0.0.1:8000/api/question-bank/', q);
+          customQuestionIds.push(res.data.id);
+      }
+      
+      const dataToSave = {
+          ...restOfData,
+          custom_fields: allFields,
+          assessment_template: selectedTemplate || null,
+          custom_questions: customQuestionIds,
+      };
+
       let jobRecord;
       if (jobToEdit) {
         const { data, error } = await supabase.from('jobs').update(dataToSave).eq('id', jobToEdit.id).select();
@@ -461,118 +496,141 @@ export default function JobForm({ onClose, onJobAdded, jobToEdit }) {
             <option value="">Pilih Tipe</option>
             <option value="online_assessment">Tes Online</option>
             <option value="interview_scheduling">Penjadwalan Wawancara</option>
+            <option value="assessment_and_interview">Asesmen & Wawancara</option>
           </select>
         </div>
 
-        {formData.recruitment_process_type === 'interview_scheduling' && (
-          <div className="bg-gray-50 p-4 rounded-lg">
-            <h4 className="text-lg font-bold mb-4">Detail Wawancara</h4>
-            <div className="grid grid-cols-2 gap-4 mb-4">
-              <div>
-                <label className="block text-gray-700 text-sm mb-2">Nama Kontak</label>
-                <input
-                  type="text"
-                  name="contact_person"
-                  value={formData.interview_details?.contact_person || ''}
-                  onChange={(e) => handleDetailChange(e, 'interview_details')}
-                  placeholder="Nama kontak yang dapat dihubungi"
-                  className="w-full p-2 border rounded-lg"
-                  required
-                />
-              </div>
+        {(formData.recruitment_process_type === 'online_assessment' || formData.recruitment_process_type === 'assessment_and_interview') && (
+            <div className="bg-gray-50 p-4 rounded-lg">
+                <h4 className="text-lg font-bold mb-4">Pengaturan Asesmen</h4>
+                <div>
+                    <label className="block text-gray-700 text-sm mb-2">Pilih Template Asesmen (Opsional)</label>
+                    <select
+                        value={selectedTemplate}
+                        onChange={(e) => setSelectedTemplate(e.target.value)}
+                        className="w-full p-2 border rounded-lg"
+                    >
+                        <option value="">-- Pilih Template --</option>
+                        {templates.map(tpl => (
+                            <option key={tpl.id} value={tpl.id}>{tpl.name}</option>
+                        ))}
+                    </select>
+                </div>
+                
+                <div className="mt-6">
+                    <h5 className="text-lg font-bold mb-2">Atau Tambah Pertanyaan Kustom</h5>
+                    <div className="flex space-x-2 mb-2">
+                        <input
+                            type="text"
+                            placeholder="Teks Pertanyaan Kustom"
+                            value={newCustomQuestion.text}
+                            onChange={(e) => setNewCustomQuestion({ ...newCustomQuestion, text: e.target.value })}
+                            className="flex-1 p-2 border rounded-md"
+                        />
+                        <select
+                            value={newCustomQuestion.question_type}
+                            onChange={(e) => setNewCustomQuestion({ ...newCustomQuestion, question_type: e.target.value })}
+                            className="p-2 border rounded-md"
+                        >
+                            <option value="ESSAY">Essay</option>
+                            <option value="MULTIPLE_CHOICE">Multiple Choice</option>
+                            <option value="SINGLE_CHOICE">Single Choice</option>
+                            <option value="FILE_UPLOAD">File Upload</option>
+                            <option value="CODING_CHALLENGE">Coding Challenge</option>
+                            <option value="TEXT_INPUT">Text Input</option>
+                            <option value="INTEGER_INPUT">Integer Input</option>
+                        </select>
+                        <button type="button" onClick={handleAddCustomQuestion} className="px-4 py-2 bg-teal-500 text-white rounded-md">Tambah</button>
+                    </div>
+                    <ul className="space-y-2">
+                        {customQuestions.map((q, index) => (
+                            <li key={index} className="p-2 bg-white rounded-md flex justify-between items-center">
+                                <span>{q.text} ({q.question_type})</span>
+                                <button type="button" onClick={() => handleRemoveCustomQuestion(index)} className="text-red-500 hover:text-red-700">Hapus</button>
+                            </li>
+                        ))}
+                    </ul>
+                </div>
             </div>
-            {/* Input baru untuk Penjadwalan Otomatis */}
-            <h4 className="text-lg font-bold mb-2">Pengaturan Penjadwalan Otomatis</h4>
-            <p className="text-gray-600 text-sm mb-4">Isi detail ini agar sistem bisa menjadwalkan semua kandidat shortlisted secara otomatis setelah Anda menyimpan lowongan ini.</p>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-gray-700 text-sm mb-2">Tanggal Mulai</label>
-                <input
-                  type="date"
-                  name="schedule_start_date"
-                  value={formData.schedule_start_date}
-                  onChange={(e) => setFormData({ ...formData, schedule_start_date: e.target.value })}
-                  className="w-full p-2 border rounded-lg"
-                  required
-                />
-              </div>
-              <div>
-                <label className="block text-gray-700 text-sm mb-2">Tanggal Selesai</label>
-                <input
-                  type="date"
-                  name="schedule_end_date"
-                  value={formData.schedule_end_date}
-                  onChange={(e) => setFormData({ ...formData, schedule_end_date: e.target.value })}
-                  className="w-full p-2 border rounded-lg"
-                  required
-                />
-              </div>
-              <div>
-                <label className="block text-gray-700 text-sm mb-2">Waktu Mulai Harian</label>
-                <input
-                  type="time"
-                  name="daily_start_time"
-                  value={formData.daily_start_time}
-                  onChange={(e) => setFormData({ ...formData, daily_start_time: e.target.value })}
-                  className="w-full p-2 border rounded-lg"
-                  required
-                />
-              </div>
-              <div>
-                <label className="block text-gray-700 text-sm mb-2">Waktu Selesai Harian</label>
-                <input
-                  type="time"
-                  name="daily_end_time"
-                  value={formData.daily_end_time}
-                  onChange={(e) => setFormData({ ...formData, daily_end_time: e.target.value })}
-                  className="w-full p-2 border rounded-lg"
-                  required
-                />
-              </div>
-              <div className="md:col-span-2">
-                <label className="block text-gray-700 text-sm mb-2">Durasi Per Wawancara (menit)</label>
-                <input
-                  type="number"
-                  name="duration_per_interview_minutes"
-                  value={formData.duration_per_interview_minutes}
-                  onChange={(e) => setFormData({ ...formData, duration_per_interview_minutes: parseInt(e.target.value, 10) })}
-                  className="w-full p-2 border rounded-lg"
-                  required
-                />
-              </div>
-            </div>
-          </div>
         )}
 
-        {formData.recruitment_process_type === 'online_assessment' && (
-          <div className="bg-gray-50 p-4 rounded-lg">
-            <h4 className="text-lg font-bold mb-4">Detail Penilaian Online</h4>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-gray-700 text-sm mb-2">URL Tes Online</label>
-                <input
-                  type="url"
-                  name="link"
-                  value={formData.assessment_details?.link || ''}
-                  onChange={(e) => handleDetailChange(e, 'assessment_details')}
-                  placeholder="URL ke tes online"
-                  className="w-full p-2 border rounded-lg"
-                  required
-                />
-              </div>
-              <div>
-                <label className="block text-gray-700 text-sm mb-2">Batas Waktu (Deadline)</label>
-                <input
-                  type="datetime-local"
-                  name="deadline"
-                  value={formData.assessment_details?.deadline || ''}
-                  onChange={(e) => handleDetailChange(e, 'assessment_details')}
-                  className="w-full p-2 border rounded-lg"
-                  required
-                />
-              </div>
+        {(formData.recruitment_process_type === 'interview_scheduling' || formData.recruitment_process_type === 'assessment_and_interview') && (
+            <div className="bg-gray-50 p-4 rounded-lg">
+                <h4 className="text-lg font-bold mb-4">Detail Wawancara</h4>
+                <div className="grid grid-cols-2 gap-4 mb-4">
+                    <div>
+                        <label className="block text-gray-700 text-sm mb-2">Nama Kontak</label>
+                        <input
+                            type="text"
+                            name="contact_person"
+                            value={formData.interview_details?.contact_person || ''}
+                            onChange={(e) => handleDetailChange(e, 'interview_details')}
+                            placeholder="Nama kontak yang dapat dihubungi"
+                            className="w-full p-2 border rounded-lg"
+                            required
+                        />
+                    </div>
+                </div>
+                <h4 className="text-lg font-bold mb-2">Pengaturan Penjadwalan Otomatis</h4>
+                <p className="text-gray-600 text-sm mb-4">Isi detail ini agar sistem bisa menjadwalkan semua kandidat shortlisted secara otomatis setelah Anda menyimpan lowongan ini.</p>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label className="block text-gray-700 text-sm mb-2">Tanggal Mulai</label>
+                        <input
+                            type="date"
+                            name="schedule_start_date"
+                            value={formData.schedule_start_date}
+                            onChange={(e) => setFormData({ ...formData, schedule_start_date: e.target.value })}
+                            className="w-full p-2 border rounded-lg"
+                            required
+                        />
+                    </div>
+                    <div>
+                        <label className="block text-gray-700 text-sm mb-2">Tanggal Selesai</label>
+                        <input
+                            type="date"
+                            name="schedule_end_date"
+                            value={formData.schedule_end_date}
+                            onChange={(e) => setFormData({ ...formData, schedule_end_date: e.target.value })}
+                            className="w-full p-2 border rounded-lg"
+                            required
+                        />
+                    </div>
+                    <div>
+                        <label className="block text-gray-700 text-sm mb-2">Waktu Mulai Harian</label>
+                        <input
+                            type="time"
+                            name="daily_start_time"
+                            value={formData.daily_start_time}
+                            onChange={(e) => setFormData({ ...formData, daily_start_time: e.target.value })}
+                            className="w-full p-2 border rounded-lg"
+                            required
+                        />
+                    </div>
+                    <div>
+                        <label className="block text-gray-700 text-sm mb-2">Waktu Selesai Harian</label>
+                        <input
+                            type="time"
+                            name="daily_end_time"
+                            value={formData.daily_end_time}
+                            onChange={(e) => setFormData({ ...formData, daily_end_time: e.target.value })}
+                            className="w-full p-2 border rounded-lg"
+                            required
+                        />
+                    </div>
+                    <div className="md:col-span-2">
+                        <label className="block text-gray-700 text-sm mb-2">Durasi Per Wawancara (menit)</label>
+                        <input
+                            type="number"
+                            name="duration_per_interview_minutes"
+                            value={formData.duration_per_interview_minutes}
+                            onChange={(e) => setFormData({ ...formData, duration_per_interview_minutes: parseInt(e.target.value, 10) })}
+                            className="w-full p-2 border rounded-lg"
+                            required
+                        />
+                    </div>
+                </div>
             </div>
-          </div>
         )}
 
         <div className="flex justify-end space-x-4">
@@ -589,7 +647,6 @@ export default function JobForm({ onClose, onJobAdded, jobToEdit }) {
         </div>
       </form>
 
-      {/* Menampilkan status penjadwalan di luar form */}
       <div className="mt-4">
         {schedulingStatus === 'loading' && <p className="text-blue-500">Sedang menjadwalkan...</p>}
         {schedulingStatus === 'success' && <p className="text-green-500">✅ Penjadwalan berhasil! Silakan periksa dashboard untuk melihat jadwal.</p>}

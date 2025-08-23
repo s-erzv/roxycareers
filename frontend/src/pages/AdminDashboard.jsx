@@ -5,6 +5,8 @@ import ApplicantDetail from '../components/ApplicantDetail';
 import SchedulingForm from '../components/SchedulingForm';
 import { useNavigate } from 'react-router-dom';
 import JobFormPage from './JobFormPage';
+import QuestionBankPage from './QuestionBankPage';
+import axios from 'axios';
 
 // Komponen untuk menampilkan daftar pelamar
 const ApplicantsList = ({ job, applicants, onBack, onDownloadFile, onUpdateStatus, onSelectApplicant, onRescreen, navigate }) => (
@@ -85,6 +87,38 @@ const ApplicantsList = ({ job, applicants, onBack, onDownloadFile, onUpdateStatu
   </div>
 );
 
+// Komponen JobItem untuk konsistensi tampilan
+const JobItem = ({ job, onOpenJobForm, onViewApplicants, onDeleteJob }) => (
+    <div
+        className="bg-white rounded-xl shadow-lg p-6 transition-shadow duration-300 border border-gray-200"
+    >
+        <div className="cursor-pointer">
+            <h4 className="text-xl font-semibold text-gray-800">{job.title}</h4>
+            <p className="text-sm text-gray-500 mt-1">{job.company} | {job.location}</p>
+        </div>
+        <div className="mt-4 flex space-x-2">
+            <button
+                onClick={() => onViewApplicants(job)}
+                className="text-sm text-blue-500 hover:text-blue-700 font-semibold"
+            >
+                Lihat Pelamar
+            </button>
+            <button
+                onClick={() => onOpenJobForm(job)}
+                className="text-sm text-blue-500 hover:text-blue-700 font-semibold"
+            >
+                Edit
+            </button>
+            <button
+                onClick={() => onDeleteJob(job.id)}
+                className="text-sm text-red-500 hover:text-red-700 font-semibold"
+            >
+                Hapus
+            </button>
+        </div>
+    </div>
+);
+
 export default function AdminDashboard() {
   const { userProfile } = useAuth();
   const [loading, setLoading] = useState(true);
@@ -96,35 +130,35 @@ export default function AdminDashboard() {
   const navigate = useNavigate();
 
   const triggerAutoScheduling = async (jobId) => {
-  if (!window.confirm('Apakah Anda yakin ingin menjadwalkan interview secara otomatis untuk lowongan ini?')) {
-    return;
-  }
-  
-  try {
-    const response = await fetch(`https://{your-supabase-url}/auto_schedule_interviews/${jobId}`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        // Tambahkan header otentikasi jika diperlukan
-      },
-    });
-
-    if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.error || 'Gagal menjadwalkan.');
+    if (!window.confirm('Apakah Anda yakin ingin menjadwalkan interview secara otomatis untuk lowongan ini?')) {
+      return;
     }
+  
+    try {
+      const response = await fetch(`https://{your-supabase-url}/auto_schedule_interviews/${jobId}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          // Tambahkan header otentikasi jika diperlukan
+        },
+      });
 
-    const data = await response.json();
-    console.log('Penjadwalan berhasil:', data.schedules);
-    alert('Penjadwalan otomatis berhasil dijalankan!');
-    // Muat ulang data dashboard setelah berhasil
-    fetchJobs(); 
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Gagal menjadwalkan.');
+      }
 
-  } catch (error) {
-    console.error('Error saat menjadwalkan:', error);
-    alert('Terjadi kesalahan saat menjadwalkan.');
-  }
-};
+      const data = await response.json();
+      console.log('Penjadwalan berhasil:', data.schedules);
+      alert('Penjadwalan otomatis berhasil dijalankan!');
+      // Muat ulang data dashboard setelah berhasil
+      fetchJobs(); 
+
+    } catch (error) {
+      console.error('Error saat menjadwalkan:', error);
+      alert('Terjadi kesalahan saat menjadwalkan.');
+    }
+  };
 
   const handleRescreening = async (applicantId, onRescreenSuccess) => {
     try {
@@ -349,54 +383,42 @@ export default function AdminDashboard() {
           navigate={navigate}
         />      
       );
+    } else if (view === 'questionBank') {
+        return <QuestionBankPage onBack={() => setView('list')} />;
     } else {
       return (
         <>
           <div className="mt-8 flex justify-between items-center">
             <h3 className="text-2xl font-semibold">Kelola Lowongan</h3>
-            <button
-              onClick={() => handleOpenJobForm()}
-              className="bg-blue-500 text-white font-bold py-2 px-4 rounded-full hover:bg-blue-600 transition-colors duration-200"
-            >
-              + Tambah Lowongan
-            </button>
+            <div className="space-x-2">
+                <button
+                    onClick={() => setView('questionBank')}
+                    className="bg-purple-500 text-white font-bold py-2 px-4 rounded-full hover:bg-purple-600 transition-colors duration-200"
+                >
+                    Bank Soal
+                </button>
+                <button
+                    onClick={() => handleOpenJobForm()}
+                    className="bg-blue-500 text-white font-bold py-2 px-4 rounded-full hover:bg-blue-600 transition-colors duration-200"
+                >
+                    + Tambah Lowongan
+                </button>
+            </div>
           </div>
           <div className="mt-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {jobs.length > 0 ? (
               jobs.map(job => (
-                <div
-                  key={job.id}
-                  className="bg-white rounded-xl shadow-lg p-6 transition-shadow duration-300 border border-gray-200"
-                >
-                  <div className="cursor-pointer">
-                    <h4 className="text-xl font-semibold text-gray-800">{job.title}</h4>
-                    <p className="text-sm text-gray-500 mt-1">{job.company} | {job.location}</p>
-                  </div>
-                  <div className="mt-4 flex space-x-2">
-                    <button
-                      onClick={() => {
+                <JobItem
+                    key={job.id}
+                    job={job}
+                    onOpenJobForm={handleOpenJobForm}
+                    onViewApplicants={() => {
                         setSelectedJob(job);
                         fetchApplicants(job.id);
                         setView('applicantsList');
-                      }}
-                      className="text-sm text-blue-500 hover:text-blue-700 font-semibold"
-                    >
-                      Lihat Pelamar
-                    </button>
-                    <button
-                      onClick={() => handleOpenJobForm(job)}
-                      className="text-sm text-blue-500 hover:text-blue-700 font-semibold"
-                    >
-                      Edit
-                    </button>
-                    <button
-                      onClick={() => handleDeleteJob(job.id)}
-                      className="text-sm text-red-500 hover:text-red-700 font-semibold"
-                    >
-                      Hapus
-                    </button>
-                  </div>
-                </div>
+                    }}
+                    onDeleteJob={handleDeleteJob}
+                />
               ))
             ) : (
               <p className="col-span-full text-center text-gray-500">Tidak ada lowongan yang tersedia.</p>

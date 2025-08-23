@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
 import { useAuth } from '../contexts/AuthContext';
 import ApplicationDetail from './ApplicationDetail';
+import AssessmentPage from './AssessmentPage';
 
 export default function CandidateDashboard() {
   const { session } = useAuth();
@@ -112,6 +113,14 @@ export default function CandidateDashboard() {
     return <ApplicationDetail application={selectedApplication} onBack={() => setSelectedApplication(null)} />;
   }
 
+   if (selectedApplication) {
+    if (selectedApplication.status === 'Shortlisted') {
+        return <AssessmentPage applicant={selectedApplication} onBack={() => setSelectedApplication(null)} />;
+    }
+    return <ApplicationDetail application={selectedApplication} onBack={() => setSelectedApplication(null)} />;
+  }
+
+
   return (
     <div className="p-8">
       <h2 className="text-3xl font-bold text-gray-900 mb-6">Status Aplikasi Anda</h2>
@@ -139,6 +148,11 @@ export default function CandidateDashboard() {
                     <span className="ml-4 text-sm text-gray-600">
                       Jadwal: {formattedDate}, {formattedTime} WIB
                     </span>
+                  )}
+                  {app.status === 'Shortlisted' && (
+                     <span className="ml-4 text-sm text-teal-600 font-semibold">
+                       Asesmen Tersedia
+                     </span>
                   )}
                   <span className="text-xs text-gray-400 ml-auto">
                     Melamar pada: {new Date(app.created_at).toLocaleDateString()}

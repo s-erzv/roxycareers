@@ -9,11 +9,17 @@ from applications.model_utils import get_ai_score
 from django.shortcuts import render
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
+from rest_framework import status
 from datetime import datetime, timedelta, date, time
 import logging
 import pytz
+from django.db import transaction
+from .models import Job, Applicant, Question, AssessmentAnswer, AssessmentTemplate
 
 logger = logging.getLogger(__name__)
+
+# Daftar jenis pertanyaan yang membutuhkan review manual
+MANUAL_REVIEW_TYPES = ['ESSAY', 'FILE_UPLOAD', 'CODING_CHALLENGE', 'TEXT_INPUT']
 
 @csrf_exempt
 def apply(request):
@@ -412,3 +418,200 @@ def request_reschedule_applicant(request):
     except Exception as e:
         logger.error(f"Error saat meminta reschedule: {e}")
         return Response({"error": str(e)}, status=500)
+
+# VIEW BARU: Manajemen Bank Soal (Questions)
+@api_view(['POST', 'GET'])
+def manage_question_bank(request):
+    if request.method == 'POST':
+        data = request.data
+        question = Question.objects.create(
+            text=data.get('text'),
+            question_type=data.get('question_type'),
+            options=data.get('options'),
+            solution=data.get('solution'),
+        )
+        return Response({"message": "Question created in bank successfully.", "id": question.id}, status=status.HTTP_201_CREATED)
+    
+    elif request.method == 'GET':
+        questions = Question.objects.all().values()
+        return Response(list(questions), status=status.HTTP_200_OK)
+
+# VIEW BARU: Manajemen Template
+@api_view(['POST', 'GET'])
+def manage_assessment_templates(request):
+    if request.method == 'POST':
+        data = request.data
+        template = AssessmentTemplate.objects.create(
+            name=data.get('name'),
+            description=data.get('description')
+        )
+        return Response({"message": "Template created successfully.", "id": template.id}, status=status.HTTP_201_CREATED)
+    
+    elif request.method == 'GET':
+        templates = AssessmentTemplate.objects.all().values()
+        return Response(list(templates), status=status.HTTP_200_OK)
+
+# VIEW BARU: Mengelola Pertanyaan di dalam Template
+@api_view(['POST'])
+def add_question_to_template(request, template_id):
+    try:
+        template = AssessmentTemplate.objects.get(id=template_id)
+        question_id = request.data.get('question_id')
+        question = Question.objects.get(id=question_id)
+        template.questions.add(question)
+        return Response({"message": "Question added to template successfully."}, status=status.HTTP_200_OK)
+    except (AssessmentTemplate.DoesNotExist, Question.DoesNotExist) as e:
+        return Response({"error": str(e)}, status=status.HTTP_404_NOT_FOUND)
+
+# VIEW BARU: Mengambil Pertanyaan untuk Asesmen Job
+@api_view(['GET'])
+def get_job_assessment_questions(request, job_id):
+    try:
+        job = Job.objects.get(id=job_id)
+        questions = []
+        
+        if job.assessment_template:
+            template_questions = job.assessment_template.questions.all()
+            questions.extend(template_questions)
+        
+        custom_questions = job.custom_questions.all()
+        questions.extend(custom_questions)
+        
+        formatted_questions = [{
+            'id': q.id, 
+            'text': q.text, 
+            'question_type': q.question_type, 
+            'options': q.options,
+            'solution': q.solution,
+        } for q in questions]
+        
+        return Response(formatted_questions, status=status.HTTP_200_OK)
+
+    except Job.DoesNotExist:
+        return Response({"error": "Job not found."}, status=status.HTTP_404_NOT_FOUND)
+
+# Modifikasi fungsi submit_assessment
+@api_view(['POST'])
+def submit_assessment(request, applicant_id):
+    try:
+        applicant = Applicant.objects.get(id=applicant_id)
+    except Applicant.DoesNotExist:
+        return Response({"error": "Applicant not found."}, status=status.HTTP_404_NOT_FOUND)
+        
+    data = request.data
+    answers = data.get('answers', [])
+    
+    requires_manual_review = False
+    total_score = 0
+    total_questions = len(answers)
+
+    with transaction.atomic():
+        AssessmentAnswer.objects.filter(applicant=applicant).delete()
+        
+        for answer_data in answers:
+            question_id = answer_data.get('question_id')
+            answer_text = answer_data.get('answer')
+            
+            try:
+                question = Question.objects.get(id=question_id)
+            except Question.DoesNotExist:
+                return Response({"error": f"Question with ID {question_id} not found."}, status=status.HTTP_404_NOT_FOUND)
+
+            answer_score = 0
+            is_correct = None
+
+            if question.question_type in MANUAL_REVIEW_TYPES:
+                requires_manual_review = True
+                is_correct = None
+            elif question.question_type == 'SINGLE_CHOICE' or question.question_type == 'MULTIPLE_CHOICE':
+                if answer_text == question.solution:
+                    is_correct = True
+                    answer_score = 100
+                else:
+                    is_correct = False
+            elif question.question_type == 'INTEGER_INPUT':
+                try:
+                    submitted_value = int(answer_text)
+                    correct_value = int(question.solution)
+                    if submitted_value == correct_value:
+                        is_correct = True
+                        answer_score = 100
+                    else:
+                        is_correct = False
+                except (ValueError, TypeError):
+                    is_correct = False
+                    answer_score = 0
+            
+            total_score += answer_score
+            
+            AssessmentAnswer.objects.create(
+                applicant=applicant,
+                question=question,
+                answer=answer_text,
+                is_correct=is_correct,
+                score=answer_score
+            )
+    
+    if requires_manual_review:
+        applicant.status = 'Assessment - Needs Review'
+    else:
+        applicant.status = 'Assessment - Completed'
+    
+    applicant.save()
+    
+    return Response({
+        "message": "Assessment submitted successfully.",
+        "status": applicant.status,
+        "total_score_auto_graded": total_score
+    }, status=status.HTTP_201_CREATED)
+
+# VIEW BARU: Endpoint untuk admin melihat jawaban dan menilai
+@api_view(['GET', 'POST'])
+def review_assessment(request, applicant_id):
+    try:
+        applicant = Applicant.objects.get(id=applicant_id)
+    except Applicant.DoesNotExist:
+        return Response({"error": "Applicant not found."}, status=status.HTTP_404_NOT_FOUND)
+
+    if request.method == 'GET':
+        answers_to_review = AssessmentAnswer.objects.filter(applicant=applicant, question__question_type__in=MANUAL_REVIEW_TYPES)
+        auto_graded_answers = AssessmentAnswer.objects.filter(applicant=applicant).exclude(question__question_type__in=MANUAL_REVIEW_TYPES)
+        
+        data_to_send = {
+            'applicant_name': applicant.name,
+            'answers_to_review': [
+                {
+                    'question_id': ans.question.id,
+                    'question_text': ans.question.text,
+                    'answer': ans.answer,
+                    'type': ans.question.question_type,
+                } for ans in answers_to_review
+            ],
+            'auto_graded_scores': [
+                {'question_text': ans.question.text, 'score': ans.score, 'is_correct': ans.is_correct} for ans in auto_graded_answers
+            ]
+        }
+        return Response(data_to_send, status=status.HTTP_200_OK)
+
+    elif request.method == 'POST':
+        data = request.data
+        manual_scores = data.get('scores', {})
+        
+        with transaction.atomic():
+            for question_id, score in manual_scores.items():
+                try:
+                    answer_obj = AssessmentAnswer.objects.get(applicant=applicant, question_id=question_id)
+                    answer_obj.score = score
+                    answer_obj.is_correct = (score > 0)
+                    answer_obj.save()
+                except AssessmentAnswer.DoesNotExist:
+                    continue
+
+            all_answers = AssessmentAnswer.objects.filter(applicant=applicant)
+            final_score = sum(ans.score for ans in all_answers if ans.score is not None)
+            
+            applicant.status = 'Assessment - Reviewed'
+            applicant.final_score = final_score
+            applicant.save()
+            
+        return Response({"message": "Manual review completed.", "final_score": final_score}, status=status.HTTP_200_OK)
