@@ -16,7 +16,7 @@ const getStatusMessage = (status) => {
         color: 'bg-green-100 text-green-800',
         actionMessage: 'Silakan periksa detail di bawah untuk informasi lebih lanjut.'
       };
-    case 'Scheduled for Interview':
+    case 'scheduled':
       return {
         title: 'Jadwal Interview Telah Ditentukan',
         message: 'Jadwal interview Anda sudah ditentukan. Kami akan segera menghubungi Anda untuk detailnya.',
@@ -33,21 +33,21 @@ const getStatusMessage = (status) => {
     case 'Hired':
       return {
         title: 'Anda Diterima!',
-        message: 'Selamat! Anda telah diterima di Roxy Group. Kami akan segera menghubungi Anda untuk proses onboarding.',
+        message: 'Selamat! Anda telah diterima di Roxy Group. Kami akan segera menghubungi Anda untuk proses selanjutnya.',
         color: 'bg-green-500 text-white',
-        actionMessage: 'Persiapkan diri Anda untuk bergabung bersama kami.'
+        actionMessage: ''
       };
     case 'Rejected':
       return {
-        title: 'Lamaran Belum Sesuai',
-        message: 'Terima kasih atas partisipasi Anda. Sayangnya, untuk saat ini Anda belum lolos ke tahap berikutnya. Anda dapat mencoba melamar lowongan lain di Roxy Group.',
+        title: 'Lamaran Ditolak',
+        message: 'Mohon maaf, lamaran Anda tidak dapat kami proses lebih lanjut saat ini. Terima kasih atas ketertarikan Anda.',
         color: 'bg-red-500 text-white',
-        actionMessage: 'Jangan menyerah dan tetap semangat!'
+        actionMessage: ''
       };
     default:
       return {
         title: 'Status Tidak Diketahui',
-        message: 'Silakan hubungi tim HR kami untuk informasi lebih lanjut.',
+        message: 'Status lamaran Anda tidak dapat dikenali. Silakan hubungi tim rekrutmen kami.',
         color: 'bg-gray-100 text-gray-800',
         actionMessage: ''
       };
@@ -55,12 +55,13 @@ const getStatusMessage = (status) => {
 };
 
 export default function ApplicationDetail({ application, onBack }) {
-  const { title, message, color, actionMessage } = getStatusMessage(application.status);
-  const { jobs } = application;
+  const statusInfo = getStatusMessage(application.status);
+  const jobs = application.jobs;
 
-  const showAssessmentDetails = application.status === 'Shortlisted' && jobs?.recruitment_process_type === 'assessment';
-  const showInterviewDetails = application.status === 'Shortlisted' && jobs?.recruitment_process_type === 'interview';
-
+  const interviewTime = application.schedules && application.schedules.length > 0 ? new Date(application.schedules[0].interview_time) : null;
+  const formattedDate = interviewTime ? interviewTime.toLocaleDateString('en-US') : '';
+  const formattedTime = interviewTime ? interviewTime.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) : '';
+  
   return (
     <div className="p-8">
       <button onClick={onBack} className="flex items-center text-gray-600 hover:text-gray-900 transition-colors duration-200">
@@ -69,49 +70,42 @@ export default function ApplicationDetail({ application, onBack }) {
         </svg>
         Kembali ke Dashboard
       </button>
-      <div className={`bg-white rounded-xl shadow-lg p-8 mt-4 border-l-4`} style={{ borderColor: color.split('-')[1] }}>
-        <h2 className="text-3xl font-bold text-gray-900 mb-2">{title}</h2>
-        <p className="text-gray-600 leading-relaxed mb-4">{message}</p>
-        
-        {/* Tampilkan detail assessment jika statusnya Shortlisted dan prosesnya Assessment */}
-        {showAssessmentDetails && jobs?.assessment_details && (
-          <div className="mt-6 p-4 bg-gray-100 rounded-lg">
-            <h4 className="font-semibold text-gray-800">Detail Penilaian</h4>
-            <p className="mt-2 text-sm text-gray-600"><strong>Tanggal:</strong> {new Date(jobs.assessment_details.deadline).toLocaleDateString()}</p>
-            <p className="text-sm text-gray-600"><strong>Waktu:</strong> {new Date(jobs.assessment_details.deadline).toLocaleTimeString()}</p>
-            <p className="text-sm text-gray-600">
-              <strong>Link:</strong> 
-              <a href={jobs.assessment_details.link} target="_blank" rel="noopener noreferrer" className="text-teal-600 hover:underline ml-1">
-                {jobs.assessment_details.link}
-              </a>
-            </p>
-          </div>
-        )}
-        {actionMessage && (
-          <div className="mt-6 p-4 bg-blue-50 border-l-4 border-blue-500 text-blue-800 rounded-lg">
-            <p className="text-sm">{actionMessage}</p>
-          </div>
-        )}
 
-        {/* Tampilkan detail interview jika statusnya Shortlisted dan prosesnya Interview */}
-        {showInterviewDetails && jobs?.interview_details && (
-          <div className="mt-6 p-4 bg-gray-100 rounded-lg">
-            <h4 className="font-semibold text-gray-800">Detail Interview</h4>
-            <p className="mt-2 text-sm text-gray-600"><strong>Waktu Tersedia:</strong> {jobs.interview_details.start_time} - {jobs.interview_details.end_time}</p>
-            <p className="text-sm text-gray-600">
-              <strong>Link:</strong> 
-              <a href={jobs.interview_details.link} target="_blank" rel="noopener noreferrer" className="text-teal-600 hover:underline ml-1">
-                {jobs.interview_details.link}
-              </a>
+      <div className="bg-white rounded-xl shadow-lg p-6 mt-4">
+        <div className="flex items-center mb-4">
+          <h2 className="text-2xl font-bold text-gray-900">{jobs.title}</h2>
+          <span className={`ml-4 px-3 py-1 rounded-full text-sm font-semibold ${statusInfo.color}`}>
+            {statusInfo.title}
+          </span>
+        </div>
+        <p className="text-sm text-gray-500 mt-1">Perusahaan: {jobs.company}</p>
+        <p className="text-sm text-gray-500">Melamar pada: {new Date(application.created_at).toLocaleDateString()}</p>
+        
+        {application.status === 'scheduled' && interviewTime && (
+          <div className="mt-6 p-4 bg-yellow-100 rounded-lg border-l-4 border-yellow-500 text-yellow-800">
+            <h4 className="font-bold">Detail Jadwal Interview</h4>
+            <p className="mt-2 text-sm">
+              Interview Anda dijadwalkan pada: <strong>{formattedDate}, {formattedTime} WIB</strong>.
             </p>
-            <p className="text-sm text-gray-600"><strong>Kontak:</strong> {jobs.interview_details.contact_person}</p>
+            {jobs.interview_details?.link && (
+                <p className="text-sm mt-1">
+                  Link interview: 
+                  <a href={jobs.interview_details.link} target="_blank" rel="noopener noreferrer" className="text-yellow-800 font-semibold hover:underline ml-1">
+                    {jobs.interview_details.link}
+                  </a>
+                </p>
+            )}
+             {jobs.interview_details?.contact_person && (
+                <p className="text-sm mt-1">
+                  Kontak Person: <strong>{jobs.interview_details.contact_person}</strong>
+                </p>
+            )}
           </div>
         )}
         
-
         <div className="mt-6">
-          <h3 className="text-xl font-semibold text-gray-800">{jobs.title}</h3>
-          <p className="text-sm text-gray-500 mt-1">Perusahaan: {jobs.company}</p>
+          <h3 className="text-xl font-semibold text-gray-800">Deskripsi Pekerjaan</h3>
+          <p className="text-sm text-gray-600 mt-2">{jobs.description}</p>
         </div>
       </div>
     </div>

@@ -11,7 +11,7 @@ export default function CandidateDashboard() {
   const [selectedApplication, setSelectedApplication] = useState(null);
 
   useEffect(() => {
-    const fetchApplications = async () => {
+    const fetchApplicationsAndSchedules = async () => {
       setLoading(true);
       if (!session) {
         setError('Silakan login untuk melihat status aplikasi Anda.');
@@ -19,7 +19,7 @@ export default function CandidateDashboard() {
         return;
       }
 
-      const { data, error } = await supabase
+      const { data: applicants, error: applicantsError } = await supabase
         .from('applicants')
         .select(`
           id,
@@ -33,24 +33,44 @@ export default function CandidateDashboard() {
             company,
             recruitment_process_type,
             interview_details,
-            assessment_details
-          ),
-          schedule (
-            interview_time
+            assessment_details,
+            daily_start_time,
+            daily_end_time
           )
         `)
         .eq('user_id', session.user.id)
         .order('created_at', { ascending: false });
 
-      if (error) {
-        setError('Gagal memuat aplikasi: ' + error.message);
-        console.error('Error fetching applications:', error);
-      } else {
-        setApplications(data);
+      if (applicantsError) {
+        setError('Gagal memuat aplikasi: ' + applicantsError.message);
+        console.error('Error fetching applications:', applicantsError);
+        setLoading(false);
+        return;
       }
+
+      const applicantIds = applicants.map(app => app.id);
+      const { data: schedules, error: schedulesError } = await supabase
+        .from('schedules')
+        .select('*')
+        .in('applicant_id', applicantIds);
+
+      if (schedulesError) {
+        console.error('Error fetching schedules:', schedulesError);
+      }
+
+      const applicationsWithSchedules = applicants.map(app => {
+        const matchingSchedules = schedules.filter(s => s.applicant_id === app.id);
+        return {
+          ...app,
+          schedules: matchingSchedules
+        };
+      });
+
+      setApplications(applicationsWithSchedules);
       setLoading(false);
     };
-    fetchApplications();
+
+    fetchApplicationsAndSchedules();
   }, [session]);
 
   const getStatusDisplay = (status) => {
@@ -99,6 +119,10 @@ export default function CandidateDashboard() {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {applications.map(app => {
             const statusDisplay = getStatusDisplay(app.status);
+            const interviewTime = app.schedules && app.schedules.length > 0 ? new Date(app.schedules[0].interview_time) : null;
+            const formattedDate = interviewTime ? interviewTime.toLocaleDateString('en-US') : '';
+            const formattedTime = interviewTime ? interviewTime.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) : '';
+
             return (
               <div 
                 key={app.id} 
@@ -111,9 +135,9 @@ export default function CandidateDashboard() {
                   <span className={`px-3 py-1 rounded-full text-sm font-semibold ${statusDisplay.color}`}>
                     {statusDisplay.label}
                   </span>
-                  {app.schedule && app.schedule.interview_time && (
+                  {app.status === 'scheduled' && interviewTime && (
                     <span className="ml-4 text-sm text-gray-600">
-                      Jadwal: {new Date(app.schedule.interview_time).toLocaleString()}
+                      Jadwal: {formattedDate}, {formattedTime} WIB
                     </span>
                   )}
                   <span className="text-xs text-gray-400 ml-auto">

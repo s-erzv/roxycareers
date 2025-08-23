@@ -11,6 +11,7 @@ from rest_framework.decorators import api_view
 from rest_framework.response import Response
 from datetime import datetime, timedelta, date, time
 import logging
+import pytz
 
 logger = logging.getLogger(__name__)
 
@@ -36,7 +37,7 @@ def apply(request):
             print(f"[APPLY] Memproses lamaran dari '{name}' untuk job ID '{job_id}'.")
             
             try:
-                job_data_response = supabase.from_('jobs').select('custom_fields, title').eq('id', job_id).single().execute()
+                job_data_response = supabase.from_('jobs').select('custom_fields, title, recruitment_process_type').eq('id', job_id).single().execute()
                 job_data = job_data_response.data
             except PostgrestAPIError as e:
                 print(f"[APPLY] Gagal: Error saat mengambil data job. {e.message}")
@@ -72,24 +73,22 @@ def apply(request):
                         cv_data = parse_cv_text(cv_text)
                         print(f"[APPLY] Data CV berhasil diekstrak: {cv_data}")
                         
-                        # Gabungkan data CV dengan custom answers
                         combined_answers = {**custom_answers, **cv_data}
                         
-                        # Dapatkan skor AI
-                        ai_score = get_ai_score(cv_data, job_data)
+                        ai_score_data = get_ai_score(cv_data, job_data)
+                        ai_score = ai_score_data['score']
                         print(f"[APPLY] Skor AI: {ai_score}")
 
-                        # Jalankan auto-screening dengan skor AI
                         if job_data.get('custom_fields') and combined_answers:
                             print("[APPLY] Menjalankan auto-screening...")
                             processed_answers = preprocess_answers(job_data['custom_fields'], combined_answers)
-                            screening_result = run_auto_screening(job_data['custom_fields'], processed_answers, ai_score['score'])
+                            screening_result = run_auto_screening(job_data['custom_fields'], processed_answers, ai_score)
                             auto_screening_status = screening_result['status']
                             final_score = screening_result.get('final_score')
                             
-                            if screening_result['status'] == 'Lolos':
+                            if auto_screening_status == 'Lolos':
                                 applicant_status = 'Shortlisted'
-                            elif screening_result['status'] == 'Tidak Lolos':
+                            elif auto_screening_status == 'Tidak Lolos':
                                 applicant_status = 'Rejected'
                             else:
                                 applicant_status = 'Needs Review'
@@ -104,17 +103,17 @@ def apply(request):
                     screening_result = {'status': 'Review', 'log': {'Review': [{'reason': f'Error saat memproses CV: {e}'}]}}
 
             else:
-                # Jika tidak ada CV, kita tidak bisa memberikan skor AI
                 combined_answers = custom_answers
-                screening_result = run_auto_screening(job_data['custom_fields'], combined_answers)
-                auto_screening_status = screening_result['status']
-                final_score = screening_result.get('final_score')
-                if screening_result['status'] == 'Lolos':
-                    applicant_status = 'Shortlisted'
-                elif screening_result['status'] == 'Tidak Lolos':
-                    applicant_status = 'Rejected'
-                else:
-                    applicant_status = 'Needs Review'
+                if job_data.get('custom_fields'):
+                    screening_result = run_auto_screening(job_data['custom_fields'], combined_answers, ai_score)
+                    auto_screening_status = screening_result['status']
+                    final_score = screening_result.get('final_score')
+                    if auto_screening_status == 'Lolos':
+                        applicant_status = 'Shortlisted'
+                    elif auto_screening_status == 'Tidak Lolos':
+                        applicant_status = 'Rejected'
+                    else:
+                        applicant_status = 'Needs Review'
             
             print(f"[APPLY] Hasil Screening Otomatis: {auto_screening_status}")
             print(f"[APPLY] Total Skor Final: {final_score}")
@@ -131,13 +130,19 @@ def apply(request):
                 'custom_answers': custom_answers,
                 'auto_screening_status': auto_screening_status,
                 'auto_screening_log': screening_result['log'] if screening_result else {},
-                'ai_score': int(round(ai_score['score'])) if ai_score and ai_score['score'] is not None else None,
+                'ai_score': int(round(ai_score)) if ai_score is not None else None,
                 'final_score': int(round(final_score)) if final_score is not None else None
             }
             try:
                 print("[APPLY] Menyimpan data pelamar ke Supabase...")
-                supabase.from_('applicants').insert(insert_data).execute()
+                insert_response = supabase.from_('applicants').insert(insert_data).execute()
+                applicant_id = insert_response.data[0]['id']
                 print("[APPLY] Berhasil: Data pelamar berhasil disimpan.")
+
+                if auto_screening_status == 'Lolos':
+                    print(f"[APPLY] Status pelamar lolos, memicu penjadwalan otomatis untuk Job ID: {job_id}")
+                    auto_schedule_interviews(request, job_id)
+
             except PostgrestAPIError as e:
                 print(f"[APPLY] Gagal: Error saat menyimpan data ke Supabase. {e.message}")
                 return JsonResponse({'error': f'Failed to save application: {e.message}'}, status=500)
@@ -154,7 +159,6 @@ def apply(request):
             return JsonResponse({'error': str(e)}, status=500)
     return HttpResponse(status=405)
 
-# Fungsi rescreen_applicant juga perlu diperbarui dengan logika yang sama
 @csrf_exempt
 def rescreen_applicant(request):
     if request.method == 'POST':
@@ -208,17 +212,20 @@ def rescreen_applicant(request):
             
             print("[RESCREEN] Menjalankan auto-screening ulang...")
             print(f"[RESCREEN] Data yang digunakan untuk screening: {combined_answers}")
-            job_response = supabase.from_('jobs').select('custom_fields, title').eq('id', applicant_data['job_id']).single().execute()
+            job_response = supabase.from_('jobs').select('custom_fields, title, recruitment_process_type').eq('id', applicant_data['job_id']).single().execute()
             job_data = job_response.data
             if not job_data:
                 print(f"[RESCREEN] Gagal: Lowongan dengan ID '{applicant_data['job_id']}' tidak ditemukan.")
                 return JsonResponse({'error': 'Job not found.'}, status=404)
             
-            # Dapatkan skor AI untuk rescreening
-            ai_score = get_ai_score(cv_data, job_data)
+            ai_score_data = get_ai_score(cv_data, job_data)
+            ai_score = ai_score_data['score']
             
-            screening_result = run_auto_screening(job_data['custom_fields'], combined_answers, ai_score['score'])
-            
+            if job_data.get('custom_fields') and combined_answers:
+                screening_result = run_auto_screening(job_data['custom_fields'], combined_answers, ai_score)
+            else:
+                screening_result = {'status': 'Needs Review', 'log': {'Review': [{'reason': 'Tidak ada custom fields atau jawaban.'}]}}
+
             new_status = screening_result['status']
             final_score = screening_result.get('final_score')
             if new_status == 'Lolos':
@@ -234,10 +241,15 @@ def rescreen_applicant(request):
                     'status': applicant_status,
                     'auto_screening_status': new_status,
                     'auto_screening_log': screening_result['log'],
-                    'ai_score': int(round(ai_score['score'])) if ai_score and ai_score['score'] is not None else None,
+                    'ai_score': int(round(ai_score)) if ai_score is not None else None,
                     'final_score': int(round(final_score)) if final_score is not None else None
                 }).eq('id', applicant_id).execute()
                 print("[RESCREEN] Berhasil: Status pelamar berhasil diperbarui.")
+
+                if new_status == 'Lolos':
+                    print(f"[RESCREEN] Status pelamar lolos, memicu penjadwalan otomatis untuk Job ID: {applicant_data['job_id']}")
+                    auto_schedule_interviews(request, applicant_data['job_id'])
+
             except PostgrestAPIError as e:
                 print(f"[RESCREEN] Gagal: Error saat memperbarui status di Supabase. {e.message}")
                 return JsonResponse({'error': f'Failed to update applicant status: {e.message}'}, status=500)
@@ -247,7 +259,7 @@ def rescreen_applicant(request):
                 'message': 'Auto-screening completed successfully.', 
                 'new_status': new_status, 
                 'applicant_status': applicant_status,
-                'ai_score': int(round(ai_score['score'])), 
+                'ai_score': int(round(ai_score)), 
                 'final_score': int(round(final_score))
             })
         
@@ -259,14 +271,12 @@ def rescreen_applicant(request):
 @api_view(['POST'])
 def auto_schedule_interviews(request, job_id):
     try:
-        # Mengubah ini untuk mengambil data dari Supabase, bukan database lokal Django
         job_response = supabase.from_('jobs').select('*').eq('id', job_id).single().execute()
         job_data = job_response.data
         
         if not job_data:
             return Response({"error": "Lowongan pekerjaan tidak ditemukan di Supabase."}, status=404)
 
-        # Validasi data input dari job yang diambil dari Supabase
         if not all([
             job_data.get('schedule_start_date'),
             job_data.get('schedule_end_date'),
@@ -276,37 +286,57 @@ def auto_schedule_interviews(request, job_id):
         ]):
             return Response({"error": "Parameter penjadwalan pekerjaan tidak diatur sepenuhnya di Supabase."}, status=400)
 
-        # Ambil pelamar yang telah di-shortlist dari Supabase, bukan dari model Django
-        applicants_response = supabase.from_('applicants').select('*').eq('job_id', job_id).eq('auto_screening_status', 'Lolos').order('created_at').execute()
+        existing_schedules_response = supabase.from_('schedules').select('interview_time').eq('job_id', job_id).execute()
+        existing_schedules = {datetime.fromisoformat(s['interview_time']): True for s in existing_schedules_response.data}
+
+        applicants_response = supabase.from_('applicants').select('id, name').eq('job_id', job_id).eq('auto_screening_status', 'Lolos').execute()
         applicants_data = applicants_response.data
 
         if not applicants_data:
             return Response({"message": "Tidak ada kandidat dengan status Lolos."}, status=200)
 
-        # Konversi data tanggal dan waktu dari string ke objek datetime
+        # Tambahkan filter untuk mengecualikan pelamar yang sudah memiliki jadwal
+        scheduled_applicant_ids_response = supabase.from_('schedules').select('applicant_id').eq('job_id', job_id).execute()
+        scheduled_applicant_ids = {s['applicant_id'] for s in scheduled_applicant_ids_response.data}
+
+        applicants_to_schedule = [app for app in applicants_data if app['id'] not in scheduled_applicant_ids]
+
+        if not applicants_to_schedule:
+            return Response({"message": "Semua kandidat lolos sudah dijadwalkan."}, status=200)
+
+        wib_tz = pytz.timezone('Asia/Jakarta')
+        
         start_date = datetime.strptime(job_data['schedule_start_date'], '%Y-%m-%d').date()
         end_date = datetime.strptime(job_data['schedule_end_date'], '%Y-%m-%d').date()
-        daily_start_time = datetime.strptime(job_data['daily_start_time'], '%H:%M:%S').time()
-        daily_end_time = datetime.strptime(job_data['daily_end_time'], '%H:%M:%S').time()
+        
+        daily_start_time_str = job_data['daily_start_time']
+        daily_end_time_str = job_data['daily_end_time']
+        
         duration = timedelta(minutes=job_data['duration_per_interview_minutes'])
 
-        current_datetime = datetime.combine(start_date, daily_start_time)
-        
+        current_datetime = wib_tz.localize(datetime.combine(start_date, datetime.strptime(daily_start_time_str, '%H:%M:%S').time()))
+        end_datetime_boundary = wib_tz.localize(datetime.combine(end_date, datetime.strptime(daily_end_time_str, '%H:%M:%S').time()))
+
         scheduled_applicants = []
-        for applicant in applicants_data:
-            while current_datetime.date() <= end_date:
-                daily_end_datetime = datetime.combine(current_datetime.date(), daily_end_time)
+        for applicant in applicants_to_schedule:
+            found_slot = False
+            while current_datetime <= end_datetime_boundary:
+                daily_end_datetime = wib_tz.localize(datetime.combine(current_datetime.date(), datetime.strptime(daily_end_time_str, '%H:%M:%S').time()))
                 
+                if current_datetime in existing_schedules:
+                    current_datetime += duration
+                    continue
+
                 if current_datetime + duration <= daily_end_datetime:
-                    # Buat jadwal baru di Supabase
+                    interview_time_utc = current_datetime.astimezone(pytz.utc)
+
                     schedule_data = {
                         'applicant_id': applicant['id'],
                         'job_id': job_id,
-                        'interview_time': current_datetime.isoformat()
+                        'interview_time': interview_time_utc.isoformat()
                     }
                     supabase.from_('schedules').insert(schedule_data).execute()
                     
-                    # Perbarui status pelamar di Supabase
                     supabase.from_('applicants').update({'status': 'scheduled'}).eq('id', applicant['id']).execute()
                     
                     scheduled_applicants.append({
@@ -315,11 +345,13 @@ def auto_schedule_interviews(request, job_id):
                     })
 
                     current_datetime += duration
+                    found_slot = True
                     break
                 else:
-                    current_datetime = datetime.combine(current_datetime.date() + timedelta(days=1), daily_start_time)
-            else:
-                return Response({"message": f"Penjadwalan selesai. Tidak semua kandidat berhasil dijadwalkan. {len(scheduled_applicants)} kandidat berhasil dijadwalkan."}, status=200)
+                    current_datetime = wib_tz.localize(datetime.combine(current_datetime.date() + timedelta(days=1), datetime.strptime(daily_start_time_str, '%H:%M:%S').time()))
+            
+            if not found_slot:
+                logger.warning(f"Tidak ada slot kosong untuk pelamar {applicant['id']}.")
 
         return Response({"message": "Penjadwalan berhasil.", "schedules": scheduled_applicants}, status=200)
 
@@ -328,4 +360,55 @@ def auto_schedule_interviews(request, job_id):
         return Response({"error": f"Error Supabase: {e.message}"}, status=500)
     except Exception as e:
         logger.error(f"Error tak terduga saat auto-scheduling: {e}")
+        return Response({"error": str(e)}, status=500)
+
+@api_view(['POST'])
+def reschedule_applicant(request):
+    try:
+        data = json.loads(request.body)
+        schedule_id = data.get('schedule_id')
+        new_interview_time_str = data.get('new_interview_time')
+
+        if not all([schedule_id, new_interview_time_str]):
+            return Response({"error": "schedule_id dan new_interview_time diperlukan."}, status=400)
+
+        wib_tz = pytz.timezone('Asia/Jakarta')
+        new_interview_time = wib_tz.localize(datetime.fromisoformat(new_interview_time_str))
+
+        new_interview_time_utc = new_interview_time.astimezone(pytz.utc)
+
+        update_response = supabase.from_('schedules').update({
+            'interview_time': new_interview_time_utc.isoformat()
+        }).eq('id', schedule_id).execute()
+
+        if not update_response.data:
+            return Response({"error": "Jadwal tidak ditemukan."}, status=404)
+
+        return Response({"message": "Jadwal berhasil diperbarui."}, status=200)
+
+    except Exception as e:
+        logger.error(f"Error saat reschedule: {e}")
+        return Response({"error": str(e)}, status=500)
+
+
+@api_view(['POST'])
+def request_reschedule_applicant(request):
+    try:
+        data = json.loads(request.body)
+        applicant_id = data.get('applicant_id')
+
+        if not applicant_id:
+            return Response({"error": "applicant_id diperlukan."}, status=400)
+
+        supabase.from_('schedules').delete().eq('applicant_id', applicant_id).execute()
+
+        supabase.from_('applicants').update({
+            'status': 'Shortlisted',
+            'auto_screening_status': 'Lolos'
+        }).eq('id', applicant_id).execute()
+
+        return Response({"message": "Permintaan penjadwalan ulang berhasil dikirim. Jadwal baru akan segera dibuat."}, status=200)
+
+    except Exception as e:
+        logger.error(f"Error saat meminta reschedule: {e}")
         return Response({"error": str(e)}, status=500)

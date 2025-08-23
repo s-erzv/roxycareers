@@ -84,6 +84,37 @@ export default function AdminDashboard() {
   const [selectedApplicant, setSelectedApplicant] = useState(null);
   const navigate = useNavigate();
 
+  const triggerAutoScheduling = async (jobId) => {
+  if (!window.confirm('Apakah Anda yakin ingin menjadwalkan interview secara otomatis untuk lowongan ini?')) {
+    return;
+  }
+  
+  try {
+    const response = await fetch(`https://{your-supabase-url}/auto_schedule_interviews/${jobId}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        // Tambahkan header otentikasi jika diperlukan
+      },
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.error || 'Gagal menjadwalkan.');
+    }
+
+    const data = await response.json();
+    console.log('Penjadwalan berhasil:', data.schedules);
+    alert('Penjadwalan otomatis berhasil dijalankan!');
+    // Muat ulang data dashboard setelah berhasil
+    fetchJobs(); 
+
+  } catch (error) {
+    console.error('Error saat menjadwalkan:', error);
+    alert('Terjadi kesalahan saat menjadwalkan.');
+  }
+};
+
   const handleRescreening = async (applicantId, onRescreenSuccess) => {
     try {
       const response = await fetch('http://localhost:8000/api/rescreen-applicant', {

@@ -30,40 +30,36 @@ def run_auto_screening(job_custom_fields, applicant_answers, ai_score=None):
     final_score = 0
     print("\n[AUTO-SCREENING] Memulai proses screening otomatis...")
 
-    # Dapatkan ambang batas skor AI dari custom fields lowongan
-    ai_score_threshold = 50  # Nilai default jika tidak ada di kriteria
+    # Ambil ambang batas dari custom field
+    score_threshold = 20  # default
     for field in job_custom_fields:
         if field.get('label') == 'ai_score_threshold' and field.get('criteria'):
             try:
-                ai_score_threshold = float(field['criteria'])
+                score_threshold = float(field['criteria'])
                 break
             except (ValueError, TypeError):
                 pass
                 
-    # Periksa skor AI dan inisialisasi skor akhir
+    # Tambahkan skor AI sebagai bagian dari final_score (opsional)
     if ai_score is not None:
-        final_score = ai_score
-        print(f"[AUTO-SCREENING] Skor AI: {ai_score} (Ambang Batas: {ai_score_threshold})")
-        if ai_score < ai_score_threshold:
-            log_message["Tidak Lolos"].append({"reason": f"Skor AI ({ai_score}) di bawah ambang batas ({ai_score_threshold})."})
-        else:
-            log_message["Lolos"].append({"reason": f"Skor AI ({ai_score}) memenuhi ambang batas."})
+        final_score += ai_score
+        print(f"[AUTO-SCREENING] Menambahkan Skor AI: {ai_score}. Skor sementara: {final_score}")
     else:
-        log_message["Review"].append({"reason": "Tidak ada skor AI yang tersedia, tidak dapat mengevaluasi kriteria CV."})
+        log_message["Review"].append({"reason": "Tidak ada skor AI yang tersedia."})
 
-    # Filter kriteria, hanya proses yang memiliki is_auto=True
+    # Filter kriteria dengan is_auto=True
     screening_criteria = [
         field for field in job_custom_fields
         if field.get('is_auto', False) and field.get('criteria')
     ]
     
-    # Hitung nilai poin per kriteria yang terpenuhi
+    # Hitung poin per kriteria
     num_screening_criteria = len(screening_criteria)
     points_per_criteria = 0
     if num_screening_criteria > 0:
-      points_per_criteria = 10 / num_screening_criteria
+        points_per_criteria = 10 / num_screening_criteria
 
-    # Lanjutkan dengan logika evaluasi kriteria lainnya dan tambahkan poin
+    # Evaluasi setiap kriteria
     for criteria_item in screening_criteria:
         label = criteria_item['label']
         criteria = criteria_item.get('criteria', '')
@@ -71,12 +67,11 @@ def run_auto_screening(job_custom_fields, applicant_answers, ai_score=None):
         required = criteria_item.get('required', False)
         applicant_answer = applicant_answers.get(label)
         
-        # Lewati kriteria AI Score Threshold
+        # Lewati threshold
         if label == 'ai_score_threshold':
             continue
 
         print(f"[AUTO-SCREENING] Mengevaluasi kriteria: {label}")
-
         is_passed = False
         
         if required and (applicant_answer is None or applicant_answer == ''):
@@ -92,45 +87,42 @@ def run_auto_screening(job_custom_fields, applicant_answers, ai_score=None):
             })
             continue
 
-        # Logika untuk kriteria 'number'
+        # Number
         if criteria_type == 'number':
             result = evaluate_number_criteria(applicant_answer, criteria, label)
-            if result['status'] == 'pass':
-                log_message["Lolos"].append({"reason": result['reason']})
-                is_passed = True
-            elif result['status'] == 'fail':
-                log_message["Tidak Lolos"].append({"reason": result['reason']})
-            elif result['status'] == 'error':
-                log_message["Review"].append({"reason": result['reason']})
-        # Logika untuk kriteria 'text' (contoh: lokasi)
+        # Text
         elif criteria_type == 'text':
             result = evaluate_text_criteria(applicant_answer, criteria, label)
-            if result['status'] == 'pass':
-                log_message["Lolos"].append({"reason": result['reason']})
-                is_passed = True
-            elif result['status'] == 'fail':
-                log_message["Tidak Lolos"].append({"reason": result['reason']})
-        # Logika untuk kriteria 'boolean'
+        # Boolean
         elif criteria_type == 'boolean':
             result = evaluate_boolean_criteria(applicant_answer, criteria, label)
-            if result['status'] == 'pass':
-                log_message["Lolos"].append({"reason": result['reason']})
-                is_passed = True
-            elif result['status'] == 'fail':
-                log_message["Tidak Lolos"].append({"reason": result['reason']})
-    
+        else:
+            result = {'status': 'error', 'reason': f"Tipe kriteria {criteria_type} tidak dikenal."}
+
+        if result['status'] == 'pass':
+            log_message["Lolos"].append({"reason": result['reason']})
+            is_passed = True
+        elif result['status'] == 'fail':
+            log_message["Tidak Lolos"].append({"reason": result['reason']})
+        elif result['status'] == 'error':
+            log_message["Review"].append({"reason": result['reason']})
+
         if is_passed:
             point_gain = points_per_criteria
             final_score += point_gain
-            print(f"[AUTO-SCREENING] Kriteria '{label}' terpenuhi! Menambahkan {point_gain} poin. Skor saat ini: {final_score}")
+            print(f"[AUTO-SCREENING] Kriteria '{label}' terpenuhi! +{point_gain} poin. Skor saat ini: {final_score}")
 
-    # Tentukan status akhir
-    if log_message["Tidak Lolos"]:
+    # Evaluasi akhir pakai FINAL SCORE
+    if final_score < score_threshold:
         status = 'Tidak Lolos'
-    elif log_message["Review"]:
-        status = 'Needs Review'
+        log_message["Tidak Lolos"].append({
+            "reason": f"Skor final ({final_score}) di bawah ambang batas ({score_threshold})."
+        })
     else:
         status = 'Lolos'
+        log_message["Lolos"].append({
+            "reason": f"Skor final ({final_score}) memenuhi ambang batas ({score_threshold})."
+        })
         
     print(f"[AUTO-SCREENING] Proses selesai. Status akhir: {status}")
     print(f"[AUTO-SCREENING] Skor total final: {final_score}")
