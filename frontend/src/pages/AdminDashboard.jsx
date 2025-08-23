@@ -7,7 +7,7 @@ import { useNavigate } from 'react-router-dom';
 import JobFormPage from './JobFormPage';
 
 // Komponen untuk menampilkan daftar pelamar
-const ApplicantsList = ({ job, applicants, onBack, onDownloadFile, onUpdateStatus, onSelectApplicant, onRescreen }) => (
+const ApplicantsList = ({ job, applicants, onBack, onDownloadFile, onUpdateStatus, onSelectApplicant, onRescreen, navigate }) => (
   <div className="p-8">
     <button onClick={onBack} className="flex items-center text-gray-600 hover:text-gray-900 transition-colors duration-200">
       <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -17,6 +17,15 @@ const ApplicantsList = ({ job, applicants, onBack, onDownloadFile, onUpdateStatu
     </button>
     <div className="bg-white rounded-xl shadow-lg p-6 mt-4">
       <h3 className="text-2xl font-bold text-gray-900 mb-4">Pelamar untuk: {job.title}</h3>
+      <div className="mb-4">
+        <button
+          onClick={() => navigate('/admin/schedules', { state: { jobId: job.id } })}
+          className="px-4 py-2 text-sm font-semibold rounded-full transition-colors duration-200 
+            bg-yellow-200 text-yellow-800 hover:bg-yellow-300"
+        >
+          Lihat Jadwal Wawancara
+        </button>
+      </div>
       {applicants.length > 0 ? (
         <ul className="space-y-4">
           {applicants.map(applicant => (
@@ -68,7 +77,9 @@ const ApplicantsList = ({ job, applicants, onBack, onDownloadFile, onUpdateStatu
           ))}
         </ul>
       ) : (
-        <p className="text-center text-gray-500">Belum ada pelamar untuk lowongan ini.</p>
+        <p className="text-center text-gray-500">
+            Belum ada pelamar untuk lowongan ini.
+        </p>
       )}
     </div>
   </div>
@@ -200,7 +211,7 @@ export default function AdminDashboard() {
       .select('*, jobs (title)')
       .eq('job_id', jobId);
       
-    if (userProfile?.company) {
+    if (userProfile?.role !== 'admin_hc' && userProfile?.company) {
       query = query.eq('company', userProfile.company);
     }
 
@@ -335,6 +346,7 @@ export default function AdminDashboard() {
             setView('applicantDetail');
           }} 
           onRescreen={handleRescreeningAndRefresh}
+          navigate={navigate}
         />      
       );
     } else {
@@ -356,15 +368,21 @@ export default function AdminDashboard() {
                   key={job.id}
                   className="bg-white rounded-xl shadow-lg p-6 transition-shadow duration-300 border border-gray-200"
                 >
-                  <div className="cursor-pointer" onClick={() => {
-                    setSelectedJob(job);
-                    fetchApplicants(job.id);
-                    setView('applicantsList');
-                  }}>
+                  <div className="cursor-pointer">
                     <h4 className="text-xl font-semibold text-gray-800">{job.title}</h4>
                     <p className="text-sm text-gray-500 mt-1">{job.company} | {job.location}</p>
                   </div>
                   <div className="mt-4 flex space-x-2">
+                    <button
+                      onClick={() => {
+                        setSelectedJob(job);
+                        fetchApplicants(job.id);
+                        setView('applicantsList');
+                      }}
+                      className="text-sm text-blue-500 hover:text-blue-700 font-semibold"
+                    >
+                      Lihat Pelamar
+                    </button>
                     <button
                       onClick={() => handleOpenJobForm(job)}
                       className="text-sm text-blue-500 hover:text-blue-700 font-semibold"

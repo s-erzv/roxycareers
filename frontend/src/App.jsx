@@ -7,6 +7,7 @@ import Home from './pages/Home';
 import AdminDashboard from './pages/AdminDashboard';
 import CandidateDashboard from './pages/CandidateDashboard';
 import JobFormPage from './pages/JobFormPage';
+import InterviewSchedulePage from './pages/InterviewSchedulePage';
  
 const Header = () => {
   const { userProfile, signOut } = useAuth();
@@ -23,6 +24,17 @@ const Header = () => {
               </a>
               <a href="/dashboard" className="text-sm font-semibold text-white">
                 Dashboard
+              </a>
+            </div>
+          )}
+          {(userProfile?.role === 'admin' || userProfile?.role === 'admin_hc') && (
+            <div className="flex space-x-4">
+              <a href="/admin" className="text-sm font-semibold text-white">
+                Dashboard
+              </a>
+              {/* Tombol Jadwal Interview dihapus di sini */}
+              <a href="/admin/jobForm" className="text-sm font-semibold text-white">
+                Tambah Lowongan
               </a>
             </div>
           )}
@@ -67,12 +79,12 @@ const AppRoutes = () => {
           <Route path="*" element={<Navigate to="/home" />} />
         </Routes>
       );
-    } else { // Jika role bukan 'candidate', asumsikan itu admin/admin_hc
+    } else {
       return (
         <Routes>
-          {/* Perbaikan: Urutan rute penting. Rute spesifik harus di atas. */}
           <Route path="/admin/jobForm" element={<JobFormPage />} />
           <Route path="/admin" element={<AdminDashboard />} />
+          <Route path="/admin/schedules" element={<InterviewSchedulePage />} />
           <Route path="*" element={<Navigate to="/admin" />} />
         </Routes>
       );
