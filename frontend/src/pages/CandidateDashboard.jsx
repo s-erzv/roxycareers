@@ -30,6 +30,7 @@ export default function CandidateDashboard() {
           assessment_details,
           contact_person,
           jobs (
+            id,  
             title,
             company,
             recruitment_process_type,
@@ -110,16 +111,11 @@ export default function CandidateDashboard() {
   }
   
   if (selectedApplication) {
-    return <ApplicationDetail application={selectedApplication} onBack={() => setSelectedApplication(null)} />;
-  }
-
-   if (selectedApplication) {
     if (selectedApplication.status === 'Shortlisted') {
         return <AssessmentPage applicant={selectedApplication} onBack={() => setSelectedApplication(null)} />;
     }
     return <ApplicationDetail application={selectedApplication} onBack={() => setSelectedApplication(null)} />;
   }
-
 
   return (
     <div className="p-8">

@@ -192,10 +192,31 @@ export default function JobForm({ onClose, onJobAdded, jobToEdit }) {
         const allFields = [...templateFields, ...filteredCustomFields];
         
         const dataToSave = {
-            ...restOfData,
-            custom_fields: allFields,
-            assessment_template: selectedTemplate || null,
+          ...restOfData,
+
+          // jsonb fields → kirim objek/array langsung
+          custom_fields: allFields,
+          interview_details: formData.interview_details || {},
+          assessment_details: formData.assessment_details || {},
+
+          // rename field supaya match schema
+          assessment_template_id: selectedTemplate || null,
+
+          // format datetime properly
+          apply_deadline: formData.apply_deadline 
+            ? new Date(formData.apply_deadline).toISOString()
+            : null,
+
+          schedule_start_date: formData.schedule_start_date || null, // YYYY-MM-DD
+          schedule_end_date: formData.schedule_end_date || null,
+          daily_start_time: formData.daily_start_time 
+            ? formData.daily_start_time + ":00"
+            : null,
+          daily_end_time: formData.daily_end_time 
+            ? formData.daily_end_time + ":00"
+            : null,
         };
+
 
         // 3. Simpan atau perbarui pekerjaan utama
         let jobResponse;
@@ -205,7 +226,7 @@ export default function JobForm({ onClose, onJobAdded, jobToEdit }) {
             jobResponse = await supabase.from('jobs').insert([dataToSave]).select();
         }
         
-        if (!jobResponse.data) {
+        if (!jobResponse.data || jobResponse.data.length === 0) {
           throw new Error('No data returned from job save operation.');
         }
 
@@ -213,8 +234,11 @@ export default function JobForm({ onClose, onJobAdded, jobToEdit }) {
 
         // 4. Hubungkan pekerjaan dengan pertanyaan kustom yang baru dibuat
         for (const questionId of customQuestionIds) {
-            await axios.post(`http://127.0.0.1:8000/api/jobs/${jobId}/questions/`, { question_id: questionId });
-        }
+            await axios.post(`http://127.0.0.1:8000/api/jobs/${jobId}/add-custom-question/`, {
+              question_id: questionId,
+            });
+          }
+
 
         // 5. Jalankan penjadwalan otomatis jika diperlukan
         if (jobResponse.data[0].recruitment_process_type === 'interview_scheduling') {
@@ -289,7 +313,6 @@ export default function JobForm({ onClose, onJobAdded, jobToEdit }) {
             value={formData.type}
             onChange={(e) => setFormData({ ...formData, type: e.target.value })}
             className="w-full p-2 border rounded-lg"
-            required
           >
             <option value="">Pilih Jenis</option>
             <option value="Full-Time">Full-Time</option>

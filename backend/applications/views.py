@@ -15,6 +15,7 @@ import logging
 import pytz
 from django.db import transaction
 from .models import Job, Applicant, Question, AssessmentAnswer, AssessmentTemplate
+from django.db.models import F
 
 logger = logging.getLogger(__name__)
 
@@ -515,37 +516,45 @@ def add_custom_question_to_job(request, job_id):
 @api_view(['GET'])
 def get_job_assessment_questions(request, job_id):
     try:
-        job_response = supabase.from_('jobs').select('assessment_template_id, custom_fields').eq('id', job_id).single().execute()
-        job_data = job_response.data
-        
-        if not job_data:
-            return Response({"error": "Job not found."}, status=status.HTTP_404_NOT_FOUND)
+        # Gunakan Django ORM untuk mengambil objek Job
+        job = Job.objects.select_related('assessment_template').prefetch_related('custom_questions', 'assessment_template__questions').get(id=job_id)
         
         questions = []
-        
-        # Ambil pertanyaan dari template jika ada
-        if job_data.get('assessment_template_id'):
-            template_questions_response = supabase.from_('template_questions').select('question_id').eq('template_id', job_data['assessment_template_id']).execute()
-            template_question_ids = [q['question_id'] for q in template_questions_response.data]
-            
-            if template_question_ids:
-                template_questions_data = supabase.from_('questions').select('*').in_('id', template_question_ids).execute()
-                questions.extend(template_questions_data.data)
-        
-        # Ambil pertanyaan khusus dari custom_fields (jika ada)
-        custom_question_ids = job_data.get('custom_fields', {}).get('custom_questions', [])
-        if custom_question_ids:
-            custom_questions_data = supabase.from_('questions').select('*').in_('id', custom_question_ids).execute()
-            questions.extend(custom_questions_data.data)
-            
-        return Response(questions, status=status.HTTP_200_OK)
 
-    except PostgrestAPIError as e:
-        logger.error(f"Error Supabase saat mengambil pertanyaan job: {e.message}")
-        return Response({"error": f"Error Supabase: {e.message}"}, status=500)
+        # Ambil pertanyaan dari template jika ada
+        if job.assessment_template:
+            template_questions = job.assessment_template.questions.all()
+            questions.extend(list(template_questions.values()))
+        
+        # Ambil pertanyaan khusus pekerjaan
+        custom_questions = job.custom_questions.all()
+        questions.extend(list(custom_questions.values()))
+        
+        # Karena di frontend butuh 'duration', kita perlu tambahkan.
+        # Jika tidak ada durasi spesifik di model, kita bisa pakai default.
+        # Asumsikan durasi disimpan di AssessmentTemplate atau Job
+        
+        duration = 60 # Default duration in minutes
+        if job.assessment_template:
+            # Asumsikan ada field 'duration' di AssessmentTemplate
+            duration = job.assessment_template.duration or 60
+        # Atau jika durasi per job:
+        # duration = job.duration_per_assessment or 60 
+
+        # Hapus duplikasi jika ada pertanyaan yang sama
+        unique_questions = {q['id']: q for q in questions}.values()
+        
+        # Kirim respons
+        return Response({
+            "questions": list(unique_questions),
+            "duration": duration
+        }, status=status.HTTP_200_OK)
+
+    except Job.DoesNotExist:
+        return Response({"error": "Job not found."}, status=status.HTTP_404_NOT_FOUND)
     except Exception as e:
         logger.error(f"Error tak terduga: {e}")
-        return Response({"error": str(e)}, status=500)
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 # Modifikasi fungsi submit_assessment

@@ -1,106 +1,179 @@
-// frontend/src/components/AssessmentPage.jsx
-
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
+import { supabase } from '../supabaseClient';
+import { useAuth } from '../contexts/AuthContext';
+import { useNavigate } from 'react-router-dom';
 
-export default function AssessmentPage({ applicant, onBack }) {
-    const [questions, setQuestions] = useState([]);
-    const [answers, setAnswers] = useState({});
-    const [loading, setLoading] = useState(true);
-    const [submitting, setSubmitting] = useState(false);
-    
-    useEffect(() => {
-        const fetchQuestions = async () => {
-            try {
-                // Endpoint baru untuk mengambil pertanyaan dari job
-                const response = await axios.get(`http://localhost:8000/api/jobs/${applicant.jobs.id}/assessment-questions/`);
-                setQuestions(response.data);
-            } catch (error) {
-                console.error("Failed to fetch questions:", error);
-            } finally {
-                setLoading(false);
-            }
-        };
-        fetchQuestions();
-    }, [applicant.jobs.id]);
+const AssessmentPage = ({ applicant, onBack }) => {
+  const { session } = useAuth();
+  const navigate = useNavigate();
+  const [questions, setQuestions] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [answers, setAnswers] = useState({});
+  const [timeRemaining, setTimeRemaining] = useState(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-    const handleAnswerChange = (questionId, value) => {
-        setAnswers(prev => ({ ...prev, [questionId]: value }));
-    };
+  useEffect(() => {
+    const fetchQuestions = async () => {
+      try {
+        setLoading(true);
+        const jobId = applicant.jobs.id;
+        if (!jobId) {
+          throw new Error("Job ID is missing.");
+        }
 
-    const renderQuestionInput = (question) => {
-      switch (question.question_type) {
-        case 'ESSAY':
-        case 'TEXT_INPUT':
-          return <textarea value={answers[question.id] || ''} onChange={(e) => handleAnswerChange(question.id, e.target.value)} className="w-full p-2 border rounded-md" required />;
-        case 'INTEGER_INPUT':
-          return <input type="number" value={answers[question.id] || ''} onChange={(e) => handleAnswerChange(question.id, e.target.value)} className="w-full p-2 border rounded-md" required />;
-        case 'SINGLE_CHOICE':
-          return (
-            <div className="space-y-2">
-                {question.options.map((option, index) => (
-                    <div key={index} className="flex items-center">
-                        <input type="radio" name={`question-${question.id}`} value={option} checked={answers[question.id] === option} onChange={(e) => handleAnswerChange(question.id, e.target.value)} className="mr-2"/>
-                        <label>{option}</label>
-                    </div>
-                ))}
-            </div>
-          );
-        // Tambahkan case lain untuk jenis pertanyaan lainnya
-        case 'FILE_UPLOAD':
-            return <input type="file" onChange={(e) => handleAnswerChange(question.id, e.target.files[0])} />;
-        // Tambahkan case untuk CODING_CHALLENGE
-        case 'CODING_CHALLENGE':
-            return <textarea placeholder="Tuliskan kode Anda di sini..." value={answers[question.id] || ''} onChange={(e) => handleAnswerChange(question.id, e.target.value)} className="w-full h-40 p-2 border rounded-md font-mono" required />;
-        default:
-            return null;
+        const response = await axios.get(`${import.meta.env.VITE_BACKEND_URL}/api/jobs/${jobId}/assessment-questions/`, {
+          headers: {
+            'Authorization': `Bearer ${session.access_token}`
+          }
+        });
+        
+        if (response.data.questions && Array.isArray(response.data.questions)) {
+          setQuestions(response.data.questions);
+        } else {
+          setQuestions([]);
+        }
+
+        const duration = response.data.duration;
+        if (typeof duration === 'number' && !isNaN(duration)) {
+          setTimeRemaining(duration * 60);
+        } else {
+          setTimeRemaining(0);
+          console.warn("Invalid duration received from API.");
+        }
+
+        setLoading(false);
+      } catch (err) {
+        console.error("Failed to fetch questions:", err);
+        setError("Failed to load assessment questions. Please try again later.");
+        setLoading(false);
       }
     };
 
-    const handleSubmit = async (e) => {
-        e.preventDefault();
-        setSubmitting(true);
-        const formattedAnswers = questions.map(q => ({
-            question_id: q.id,
-            answer: answers[q.id] || ''
-        }));
+    fetchQuestions();
+  }, [applicant, session]);
+
+  useEffect(() => {
+    if (timeRemaining === null || isSubmitting) return;
+
+    const timer = setInterval(() => {
+      setTimeRemaining(prevTime => {
+        if (prevTime <= 1) {
+          clearInterval(timer);
+          handleSubmit(); 
+          return 0;
+        }
+        return prevTime - 1;
+      });
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [timeRemaining, isSubmitting]);
+
+  const handleChange = (questionId, value) => {
+    setAnswers(prevAnswers => ({
+      ...prevAnswers,
+      [questionId]: value,
+    }));
+  };
+
+  const handleSubmit = async (e) => {
+        if (e) e.preventDefault();
+        setIsSubmitting(true);
+        setError(null);
+
+        const submissionData = {
+        applicant_id: applicant.id,
+        job_id: applicant.jobs.id,
+        answers: answers
+        };
 
         try {
-            const response = await axios.post(`http://localhost:8000/api/applicants/${applicant.id}/submit_assessment/`, { answers: formattedAnswers });
-            if (response.status !== 201) throw new Error('Failed to submit assessment');
-            
-            alert('Asesmen berhasil disubmit!');
-            onBack();
-        } catch (error) {
-            alert('Gagal submit asesmen: ' + error.message);
-        } finally {
-            setSubmitting(false);
+        // Pastikan URL-nya benar
+        await axios.post(`${import.meta.env.VITE_BACKEND_URL}/api/applicants/submit-assessment/`, submissionData, {
+            headers: {
+            'Authorization': `Bearer ${session.access_token}`,
+            'Content-Type': 'application/json'
+            }
+        });
+        alert('Jawaban berhasil dikirim!');
+        onBack();
+        } catch (err) {
+        console.error("Failed to submit assessment:", err);
+        setError("Failed to submit your answers. Please check your connection and try again.");
+        setIsSubmitting(false);
         }
     };
 
-    if (loading) return <p>Memuat pertanyaan...</p>;
-    if (questions.length === 0) return <p>Tidak ada asesmen untuk lowongan ini.</p>;
-
+  if (loading) {
     return (
-        <div className="p-8">
-            <button onClick={onBack} className="flex items-center text-gray-600 hover:text-gray-900 transition-colors duration-200">
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-                </svg>
-                Kembali
-            </button>
-            <h2 className="text-2xl font-bold mb-4">Asesmen untuk {applicant.jobs.title}</h2>
-            <form onSubmit={handleSubmit} className="space-y-6">
-                {questions.map((q) => (
-                    <div key={q.id} className="bg-gray-100 p-4 rounded-lg">
-                        <label className="block font-semibold mb-2">{q.text}</label>
-                        {renderQuestionInput(q)}
-                    </div>
-                ))}
-                <button type="submit" disabled={submitting} className="px-6 py-3 bg-green-500 text-white font-semibold rounded-full hover:bg-green-600">
-                    {submitting ? 'Menyimpan...' : 'Submit Asesmen'}
-                </button>
-            </form>
-        </div>
+      <div className="flex justify-center items-center h-screen bg-gray-100">
+        <p>Memuat soal asesmen...</p>
+      </div>
     );
-}
+  }
+
+  if (error) {
+    return (
+      <div className="p-8 text-center text-red-600 bg-red-100 rounded-lg">
+        <p>{error}</p>
+        <button onClick={onBack} className="mt-4 text-blue-600 hover:underline">Kembali ke Dashboard</button>
+      </div>
+    );
+  }
+
+  const formatTime = (seconds) => {
+    if (typeof seconds !== 'number' || isNaN(seconds) || seconds < 0) {
+      return '00:00';
+    }
+    const minutes = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${minutes}:${secs < 10 ? '0' : ''}${secs}`;
+  };
+
+  return (
+    <div className="p-8">
+      <div className="flex justify-between items-center mb-6">
+        <h2 className="text-2xl font-bold">Asesmen untuk {applicant.jobs.title}</h2>
+        <div className="bg-gray-200 text-gray-800 px-4 py-2 rounded-lg font-mono">
+          Sisa Waktu: {formatTime(timeRemaining)}
+        </div>
+      </div>
+      <form onSubmit={handleSubmit} className="space-y-6">
+        {questions && questions.length > 0 ? (
+          questions.map((q, index) => (
+            <div key={q.id} className="bg-white p-6 rounded-lg shadow">
+              <p className="text-lg font-semibold mb-2">
+                {index + 1}. {q.question_text}
+              </p>
+              <textarea
+                className="w-full h-32 p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                placeholder="Tulis jawaban Anda di sini..."
+                value={answers[q.id] || ''}
+                onChange={(e) => handleChange(q.id, e.target.value)}
+                required
+              />
+            </div>
+          ))
+        ) : (
+          <p className="text-center text-gray-500">Tidak ada soal asesmen yang tersedia.</p>
+        )}
+        <div className="flex justify-end mt-8">
+          <button
+            type="submit"
+            className="px-6 py-3 bg-teal-600 text-white font-semibold rounded-lg hover:bg-teal-700 transition-colors duration-300"
+            disabled={isSubmitting}
+          >
+            {isSubmitting ? 'Mengirim...' : 'Kirim Jawaban'}
+          </button>
+        </div>
+      </form>
+      <button onClick={onBack} className="mt-4 text-gray-600 hover:underline">
+        Kembali ke Dashboard
+      </button>
+    </div>
+  );
+};
+
+export default AssessmentPage;
