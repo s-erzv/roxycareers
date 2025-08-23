@@ -54,6 +54,15 @@ const getStatusMessage = (status) => {
   }
 };
 
+const createGoogleCalendarUrl = (title, startTime, endTime, details, location) => {
+  const formattedStartTime = startTime.toISOString().replace(/-|:|\.\d\d\d/g, '');
+  const formattedEndTime = endTime.toISOString().replace(/-|:|\.\d\d\d/g, '');
+  const encodedTitle = encodeURIComponent(title);
+  const encodedDetails = encodeURIComponent(details);
+  const encodedLocation = encodeURIComponent(location);
+  return `https://www.google.com/calendar/render?action=TEMPLATE&text=${encodedTitle}&dates=${formattedStartTime}/${formattedEndTime}&details=${encodedDetails}&location=${encodedLocation}`;
+};
+
 export default function ApplicationDetail({ application, onBack }) {
   const statusInfo = getStatusMessage(application.status);
   const jobs = application.jobs;
@@ -61,6 +70,15 @@ export default function ApplicationDetail({ application, onBack }) {
   const interviewTime = application.schedules && application.schedules.length > 0 ? new Date(application.schedules[0].interview_time) : null;
   const formattedDate = interviewTime ? interviewTime.toLocaleDateString('en-US') : '';
   const formattedTime = interviewTime ? interviewTime.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) : '';
+  
+  // Asumsi durasi interview 1 jam
+  const interviewEndTime = interviewTime ? new Date(interviewTime.getTime() + 60 * 60 * 1000) : null;
+  
+  const calendarTitle = `Interview - ${jobs.title} at ${jobs.company}`;
+  const calendarDetails = `Jadwal Interview untuk posisi ${jobs.title} di ${jobs.company}.\n\nDetail:\n${jobs.interview_details?.link ? `Link: ${jobs.interview_details.link}\n` : ''}${jobs.interview_details?.contact_person ? `Kontak Person: ${jobs.interview_details.contact_person}\n` : ''}`;
+  const calendarLocation = jobs.interview_details?.link || '';
+
+  const calendarUrl = interviewTime && interviewEndTime ? createGoogleCalendarUrl(calendarTitle, interviewTime, interviewEndTime, calendarDetails, calendarLocation) : null;
   
   return (
     <div className="p-8">
@@ -99,6 +117,19 @@ export default function ApplicationDetail({ application, onBack }) {
                 <p className="text-sm mt-1">
                   Kontak Person: <strong>{jobs.interview_details.contact_person}</strong>
                 </p>
+            )}
+            {calendarUrl && (
+              <a 
+                href={calendarUrl} 
+                target="_blank" 
+                rel="noopener noreferrer" 
+                className="mt-4 inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
+              >
+                <svg className="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                  <path d="M6 2a2 2 0 00-2 2v2H3a1 1 0 000 2h1v10a2 2 0 002 2h12a2 2 0 002-2V8h1a1 1 0 000-2h-1V4a2 2 0 00-2-2h-3V1a1 1 0 00-2 0v1H8V1a1 1 0 00-2 0v1zM4 8h16v10a2 2 0 01-2 2H6a2 2 0 01-2-2V8z"></path>
+                </svg>
+                Tambahkan ke Google Kalender
+              </a>
             )}
           </div>
         )}
