@@ -37,7 +37,8 @@ export default function CandidateDashboard() {
             interview_details,
             assessment_details,
             daily_start_time,
-            daily_end_time
+            daily_end_time,
+            description
           )
         `)
         .eq('user_id', session.user.id)
@@ -89,10 +90,18 @@ export default function CandidateDashboard() {
         return { label: 'Diterima', color: 'bg-green-500 text-white' };
       case 'Rejected':
         return { label: 'Ditolak', color: 'bg-red-500 text-white' };
+      case 'Assessment - Completed':
+      case 'Assessment - Needs Review':
+      case 'Assessment - Reviewed':
+        return { label: 'Asesmen Selesai', color: 'bg-gray-400 text-white' };
       default:
         return { label: 'Status Tidak Diketahui', color: 'bg-gray-100 text-gray-800' };
     }
   };
+  
+  if (selectedApplication) {
+    return <ApplicationDetail application={selectedApplication} onBack={() => setSelectedApplication(null)} />;
+  }
 
   if (loading) {
     return (
@@ -108,13 +117,6 @@ export default function CandidateDashboard() {
         <p className="text-red-500">{error}</p>
       </div>
     );
-  }
-  
-  if (selectedApplication) {
-    if (selectedApplication.status === 'Shortlisted') {
-        return <AssessmentPage applicant={selectedApplication} onBack={() => setSelectedApplication(null)} />;
-    }
-    return <ApplicationDetail application={selectedApplication} onBack={() => setSelectedApplication(null)} />;
   }
 
   return (
@@ -145,7 +147,7 @@ export default function CandidateDashboard() {
                       Jadwal: {formattedDate}, {formattedTime} WIB
                     </span>
                   )}
-                  {app.status === 'Shortlisted' && (
+                  {(app.status === 'Shortlisted' || app.status === 'Applied') && (
                      <span className="ml-4 text-sm text-teal-600 font-semibold">
                        Asesmen Tersedia
                      </span>

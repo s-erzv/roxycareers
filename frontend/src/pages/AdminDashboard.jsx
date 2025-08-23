@@ -4,9 +4,8 @@ import { useAuth } from '../contexts/AuthContext';
 import ApplicantDetail from '../components/ApplicantDetail';
 import SchedulingForm from '../components/SchedulingForm';
 import { useNavigate } from 'react-router-dom';
-import JobFormPage from './JobFormPage';
 import QuestionBankPage from './QuestionBankPage';
-import axios from 'axios';
+import ManualAssessmentReviewPage from './ManualAssessmentReviewPage';
 
 // Komponen untuk menampilkan daftar pelamar
 const ApplicantsList = ({ job, applicants, onBack, onDownloadFile, onUpdateStatus, onSelectApplicant, onRescreen, navigate }) => (
@@ -127,7 +126,17 @@ export default function AdminDashboard() {
   const [view, setView] = useState('list');
   const [selectedJob, setSelectedJob] = useState(null);
   const [selectedApplicant, setSelectedApplicant] = useState(null);
+  const [showManualReview, setShowManualReview] = useState(false);
   const navigate = useNavigate();
+
+  const handleReviewClick = (applicantId) => { 
+    setSelectedApplicant(applicants.find(app => app.id === applicantId));
+    setShowManualReview(true);
+  };
+
+  // Memisahkan pelamar berdasarkan status
+  const applicantsToReview = applicants.filter(app => app.status === 'Assessment - Needs Review');
+  const otherApplicants = applicants.filter(app => app.status !== 'Assessment - Needs Review');
 
   const triggerAutoScheduling = async (jobId) => {
     if (!window.confirm('Apakah Anda yakin ingin menjadwalkan interview secara otomatis untuk lowongan ini?')) {
@@ -343,9 +352,20 @@ export default function AdminDashboard() {
       </div>
     );
   }
+
   
   const renderView = () => {
-    if (view === 'schedulingForm') {
+    if (showManualReview && selectedApplicant) {
+      return (
+        <ManualAssessmentReviewPage 
+          applicantId={selectedApplicant.id} 
+          onBack={() => {
+            setShowManualReview(false);
+            setSelectedApplicant(null);
+          }} 
+        />
+      );
+    } else if (view === 'schedulingForm') {
       return (
         <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full flex justify-center items-center z-50">
           <SchedulingForm
@@ -388,6 +408,54 @@ export default function AdminDashboard() {
     } else {
       return (
         <>
+          {/* Bagian Pelamar yang Perlu Ditinjau Secara Manual */}
+          {applicantsToReview.length > 0 && (
+            <div className="mb-8">
+              <h3 className="text-xl font-bold text-red-600 mb-4">
+                ⚠️ Pelamar Perlu Ditinjau Secara Manual ({applicantsToReview.length})
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {applicantsToReview.map(applicant => (
+                  <div 
+                    key={applicant.id} 
+                    className="bg-red-50 border-2 border-red-200 p-4 rounded-lg shadow cursor-pointer hover:shadow-lg hover:border-red-300 transition-all duration-200"
+                    onClick={() => handleReviewClick(applicant.id)}
+                  >
+                    <p className="font-semibold text-gray-900">{applicant.name}</p>
+                    <p className="text-sm text-gray-600">Posisi: {applicant.jobs?.title || 'N/A'}</p>
+                    <p className="text-sm text-red-600 mt-2 font-bold">
+                      🔍 Status: Perlu Ditinjau Manual
+                    </p>
+                    <div className="mt-2 text-xs text-red-500 bg-red-100 px-2 py-1 rounded">
+                      Klik untuk meninjau
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Bagian Pelamar Lainnya */}
+          {otherApplicants.length > 0 && (
+            <div className="mb-8">
+              <h3 className="text-xl font-bold text-gray-800 mb-4">
+                Pelamar Lainnya ({otherApplicants.length})
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {otherApplicants.map(applicant => (
+                  <div 
+                    key={applicant.id} 
+                    className="bg-white p-4 rounded-lg shadow opacity-75 hover:opacity-100 transition-opacity duration-200"
+                  >
+                    <p className="font-semibold text-gray-900">{applicant.name}</p>
+                    <p className="text-sm text-gray-500">Posisi: {applicant.jobs?.title || 'N/A'}</p>
+                    <p className="text-sm text-gray-500 mt-2">Status: {applicant.status}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           <div className="mt-8 flex justify-between items-center">
             <h3 className="text-2xl font-semibold">Kelola Lowongan</h3>
             <div className="space-x-2">

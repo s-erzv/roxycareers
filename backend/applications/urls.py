@@ -11,6 +11,6 @@ urlpatterns = [
     path('assessment-templates/', views.manage_assessment_templates, name='assessment_templates'),
     path('assessment-templates/<uuid:template_id>/questions/', views.add_question_to_template, name='add_question_to_template'),
     path('applicants/<uuid:applicant_id>/review_assessment/', views.review_assessment, name='review_assessment'),
-
-   path('jobs/<uuid:job_id>/assessment-questions/', views.get_job_assessment_questions, name='get_job_assessment_questions'),
+    path('applicants/<uuid:applicant_id>/submit-assessment/', views.submit_assessment, name='submit_assessment'), # Tambahkan baris ini
+    path('jobs/<uuid:job_id>/assessment-questions/', views.get_job_assessment_questions, name='get_job_assessment_questions'),
 ]

@@ -15,11 +15,12 @@ import logging
 import pytz
 from django.db import transaction
 from .models import Job, Applicant, Question, AssessmentAnswer, AssessmentTemplate
+import uuid # Tambahkan import ini
 
 logger = logging.getLogger(__name__)
 
 # Daftar jenis pertanyaan yang membutuhkan review manual
-MANUAL_REVIEW_TYPES = ['ESSAY', 'FILE_UPLOAD', 'CODING_CHALLENGE', 'TEXT_INPUT']
+MANUAL_REVIEW_TYPES = ['ESSAY', 'FILE_UPLOAD', 'CODING_CHALLENGE']
 
 @api_view(['GET'])
 def get_job_assessment_questions(request, job_id):
@@ -139,11 +140,13 @@ def get_job_assessment_questions(request, job_id):
         logger.error(f"Error tak terduga: {e}", exc_info=True)
         return Response({"error": f"Unexpected error: {str(e)}"}, status=500)
 
-# Fungsi-fungsi lainnya di views.py
 @api_view(['POST'])
 def submit_assessment(request, applicant_id):
     try:
-        applicant_response = supabase.from_('applicants').select('*').eq('id', applicant_id).single().execute()
+        # Perbaikan: Pastikan applicant_id adalah string untuk menghindari error serialisasi
+        applicant_id_str = str(applicant_id)
+        
+        applicant_response = supabase.from_('applicants').select('*').eq('id', applicant_id_str).single().execute()
         applicant_data = applicant_response.data
         if not applicant_data:
             return Response({"error": "Applicant not found."}, status=status.HTTP_404_NOT_FOUND)
@@ -156,13 +159,16 @@ def submit_assessment(request, applicant_id):
         total_questions = len(answers)
 
         # Hapus jawaban lama untuk mencegah duplikasi
-        supabase.from_('assessment_answers').delete().eq('applicant_id', applicant_id).execute()
+        supabase.from_('assessment_answers').delete().eq('applicant_id', applicant_id_str).execute()
         
         answers_to_insert = []
         
         for question_id, answer_text in answers.items():
+            # Perbaikan: Pastikan question_id adalah string
+            question_id_str = str(question_id)
+            
             try:
-                question_response = supabase.from_('questions').select('question_type, solution').eq('id', question_id).single().execute()
+                question_response = supabase.from_('questions').select('question_type, solution').eq('id', question_id_str).single().execute()
                 question = question_response.data
                 if not question:
                     return Response({"error": f"Question with ID {question_id} not found."}, status=status.HTTP_404_NOT_FOUND)
@@ -198,8 +204,8 @@ def submit_assessment(request, applicant_id):
             total_score += answer_score
             
             answers_to_insert.append({
-                'applicant_id': applicant_id,
-                'question_id': question_id,
+                'applicant_id': applicant_id_str, # Gunakan string
+                'question_id': question_id_str,   # Gunakan string
                 'answer': answer_text,
                 'is_correct': is_correct,
                 'score': answer_score
@@ -214,7 +220,7 @@ def submit_assessment(request, applicant_id):
         
         supabase.from_('applicants').update({
             'status': new_status
-        }).eq('id', applicant_id).execute()
+        }).eq('id', applicant_id_str).execute()
         
         return Response({
             "message": "Assessment submitted successfully.",
@@ -542,13 +548,13 @@ def auto_schedule_interviews(request, job_id):
                     interview_time_utc = current_datetime.astimezone(pytz.utc)
 
                     schedule_data = {
-                        'applicant_id': applicant['id'],
-                        'job_id': job_id,
+                        'applicant_id': str(applicant['id']),
+                        'job_id': str(job_id),
                         'interview_time': interview_time_utc.isoformat()
                     }
                     supabase.from_('schedules').insert(schedule_data).execute()
                     
-                    supabase.from_('applicants').update({'status': 'scheduled'}).eq('id', applicant['id']).execute()
+                    supabase.from_('applicants').update({'status': 'scheduled'}).eq('id', str(applicant['id'])).execute()
                     
                     scheduled_applicants.append({
                         "name": applicant['name'],
@@ -590,7 +596,7 @@ def reschedule_applicant(request):
 
         update_response = supabase.from_('schedules').update({
             'interview_time': new_interview_time_utc.isoformat()
-        }).eq('id', schedule_id).execute()
+        }).eq('id', str(schedule_id)).execute()
 
         if not update_response.data:
             return Response({"error": "Jadwal tidak ditemukan."}, status=404)
@@ -601,7 +607,6 @@ def reschedule_applicant(request):
         logger.error(f"Error saat reschedule: {e}")
         return Response({"error": str(e)}, status=500)
 
-
 @api_view(['POST'])
 def request_reschedule_applicant(request):
     try:
@@ -611,12 +616,12 @@ def request_reschedule_applicant(request):
         if not applicant_id:
             return Response({"error": "applicant_id diperlukan."}, status=400)
 
-        supabase.from_('schedules').delete().eq('applicant_id', applicant_id).execute()
+        supabase.from_('schedules').delete().eq('applicant_id', str(applicant_id)).execute()
 
         supabase.from_('applicants').update({
             'status': 'Shortlisted',
             'auto_screening_status': 'Lolos'
-        }).eq('id', applicant_id).execute()
+        }).eq('id', str(applicant_id)).execute()
 
         return Response({"message": "Permintaan penjadwalan ulang berhasil dikirim. Jadwal baru akan segera dibuat."}, status=200)
 
@@ -651,7 +656,6 @@ def manage_question_bank(request):
         logger.error(f"Error tak terduga: {e}")
         return Response({"error": str(e)}, status=500)
 
-
 # VIEW BARU: Manajemen Template
 @api_view(['POST', 'GET'])
 def manage_assessment_templates(request):
@@ -684,7 +688,7 @@ def add_question_to_template(request, template_id):
         
         # Masukkan ke tabel perantara template_questions
         supabase.from_('template_questions').insert({
-            'template_id': str(template_id),  # <--- Perbaikan di sini
+            'template_id': str(template_id),
             'question_id': question_id
         }).execute()
         
@@ -720,7 +724,7 @@ def add_custom_question_to_job(request, job_id):
 @api_view(['POST'])
 def submit_assessment(request, applicant_id):
     try:
-        applicant_response = supabase.from_('applicants').select('*').eq('id', applicant_id).single().execute()
+        applicant_response = supabase.from_('applicants').select('*').eq('id', str(applicant_id)).single().execute()
         applicant_data = applicant_response.data
         if not applicant_data:
             return Response({"error": "Applicant not found."}, status=status.HTTP_404_NOT_FOUND)
@@ -733,19 +737,18 @@ def submit_assessment(request, applicant_id):
         total_questions = len(answers)
 
         # Hapus jawaban lama untuk mencegah duplikasi
-        supabase.from_('assessment_answers').delete().eq('applicant_id', applicant_id).execute()
+        supabase.from_('assessment_answers').delete().eq('applicant_id', str(applicant_id)).execute()
         
         answers_to_insert = []
         
         for question_id, answer_text in answers.items():
             try:
-                question_response = supabase.from_('questions').select('question_type, solution').eq('id', question_id).single().execute()
+                question_response = supabase.from_('questions').select('question_type, solution').eq('id', str(question_id)).single().execute()
                 question = question_response.data
                 if not question:
                     return Response({"error": f"Question with ID {question_id} not found."}, status=status.HTTP_404_NOT_FOUND)
             except PostgrestAPIError as e:
                 return Response({"error": f"Question with ID {question_id} not found."}, status=status.HTTP_404_NOT_FOUND)
-
 
             answer_score = 0
             is_correct = None
@@ -775,8 +778,8 @@ def submit_assessment(request, applicant_id):
             total_score += answer_score
             
             answers_to_insert.append({
-                'applicant_id': applicant_id,
-                'question_id': question_id,
+                'applicant_id': str(applicant_id),
+                'question_id': str(question_id),
                 'answer': answer_text,
                 'is_correct': is_correct,
                 'score': answer_score
@@ -791,7 +794,7 @@ def submit_assessment(request, applicant_id):
         
         supabase.from_('applicants').update({
             'status': new_status
-        }).eq('id', applicant_id).execute()
+        }).eq('id', str(applicant_id)).execute()
         
         return Response({
             "message": "Assessment submitted successfully.",
@@ -804,16 +807,17 @@ def submit_assessment(request, applicant_id):
         return Response({"error": str(e)}, status=500)
 
 # VIEW BARU: Endpoint untuk admin melihat jawaban dan menilai
+# VIEW BARU: Endpoint untuk admin melihat jawaban dan menilai
 @api_view(['GET', 'POST'])
 def review_assessment(request, applicant_id):
     try:
-        applicant_response = supabase.from_('applicants').select('name').eq('id', applicant_id).single().execute()
+        applicant_response = supabase.from_('applicants').select('name').eq('id', str(applicant_id)).single().execute()
         applicant_data = applicant_response.data
         if not applicant_data:
             return Response({"error": "Applicant not found."}, status=status.HTTP_404_NOT_FOUND)
             
         if request.method == 'GET':
-            all_answers_response = supabase.from_('assessment_answers').select('*, question:questions(*)').eq('applicant_id', applicant_id).execute()
+            all_answers_response = supabase.from_('assessment_answers').select('*, question:questions(*)').eq('applicant_id', str(applicant_id)).execute()
             all_answers = all_answers_response.data
             
             answers_to_review = []
@@ -847,19 +851,39 @@ def review_assessment(request, applicant_id):
             manual_scores = data.get('scores', {})
             
             for question_id, score in manual_scores.items():
+                # Fix: Konversi score ke numeric value untuk perbandingan yang aman
+                try:
+                    numeric_score = float(score) if score is not None else 0
+                    int_score = int(numeric_score)  # Konversi ke integer untuk consistency
+                except (ValueError, TypeError):
+                    numeric_score = 0
+                    int_score = 0
+                
                 supabase.from_('assessment_answers').update({
-                    'score': score,
-                    'is_correct': (score > 0)
-                }).eq('applicant_id', applicant_id).eq('question_id', question_id).execute()
+                    'score': int_score,
+                    'is_correct': (numeric_score > 0)  # Gunakan numeric_score untuk perbandingan
+                }).eq('applicant_id', str(applicant_id)).eq('question_id', str(question_id)).execute()
 
-            all_answers_response = supabase.from_('assessment_answers').select('score').eq('applicant_id', applicant_id).execute()
+            # Hitung ulang total score dengan handling untuk None values
+            all_answers_response = supabase.from_('assessment_answers').select('score').eq('applicant_id', str(applicant_id)).execute()
             all_answers = all_answers_response.data
-            final_score = sum(ans['score'] for ans in all_answers if ans['score'] is not None)
+            
+            # Safe calculation dengan handling None values
+            final_score = 0
+            for ans in all_answers:
+                if ans['score'] is not None:
+                    try:
+                        score_value = float(ans['score']) if isinstance(ans['score'], str) else ans['score']
+                        final_score += score_value
+                    except (ValueError, TypeError):
+                        continue  # Skip invalid scores
+            
+            final_score = int(final_score)  # Convert to integer
             
             supabase.from_('applicants').update({
                 'status': 'Assessment - Reviewed',
                 'final_score': final_score
-            }).eq('id', applicant_id).execute()
+            }).eq('id', str(applicant_id)).execute()
                 
             return Response({"message": "Manual review completed.", "final_score": final_score}, status=status.HTTP_200_OK)
     except Exception as e:

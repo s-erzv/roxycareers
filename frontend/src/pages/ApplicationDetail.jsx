@@ -1,4 +1,5 @@
 import React from 'react';
+import { useNavigate } from 'react-router-dom';
 
 const getStatusMessage = (status) => {
   switch (status) {
@@ -7,14 +8,14 @@ const getStatusMessage = (status) => {
         title: 'Lamaran Terkirim',
         message: 'Lamaran Anda sudah berhasil kami terima. Kami akan segera memprosesnya dan memberi kabar secepatnya.',
         color: 'bg-blue-100 text-blue-800',
-        actionMessage: ''
+        actionMessage: 'Asesmen akan dimulai setelah Anda mengklik tombol di bawah ini. Pastikan Anda berada di lingkungan yang tenang dan memiliki koneksi internet yang stabil.'
       };
     case 'Shortlisted':
       return {
         title: 'Lolos Seleksi Berkas!',
         message: 'Selamat! Anda telah lolos seleksi berkas. Detail untuk tahap berikutnya sudah tersedia di bawah.',
         color: 'bg-green-100 text-green-800',
-        actionMessage: 'Silakan periksa detail di bawah untuk informasi lebih lanjut.'
+        actionMessage: 'Selamat! Anda telah lolos seleksi berkas. Silakan selesaikan asesmen Anda. Asesmen akan dimulai setelah Anda mengklik tombol di bawah ini. Pastikan Anda berada di lingkungan yang tenang dan memiliki koneksi internet yang stabil.'
       };
     case 'scheduled':
       return {
@@ -44,6 +45,13 @@ const getStatusMessage = (status) => {
         color: 'bg-red-500 text-white',
         actionMessage: ''
       };
+    case 'Assessment - Completed':
+      return {
+        title: 'Asesmen Selesai',
+        message: 'Anda telah menyelesaikan asesmen. Hasilnya akan segera diulas oleh tim rekrutmen kami.',
+        color: 'bg-gray-400 text-white',
+        actionMessage: ''
+      };
     default:
       return {
         title: 'Status Tidak Diketahui',
@@ -64,6 +72,7 @@ const createGoogleCalendarUrl = (title, startTime, endTime, details, location) =
 };
 
 export default function ApplicationDetail({ application, onBack }) {
+  const navigate = useNavigate();
   const statusInfo = getStatusMessage(application.status);
   const jobs = application.jobs;
 
@@ -71,7 +80,6 @@ export default function ApplicationDetail({ application, onBack }) {
   const formattedDate = interviewTime ? interviewTime.toLocaleDateString('en-US') : '';
   const formattedTime = interviewTime ? interviewTime.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) : '';
   
-  // Asumsi durasi interview 1 jam
   const interviewEndTime = interviewTime ? new Date(interviewTime.getTime() + 60 * 60 * 1000) : null;
   
   const calendarTitle = `Interview - ${jobs.title} at ${jobs.company}`;
@@ -79,7 +87,13 @@ export default function ApplicationDetail({ application, onBack }) {
   const calendarLocation = jobs.interview_details?.link || '';
 
   const calendarUrl = interviewTime && interviewEndTime ? createGoogleCalendarUrl(calendarTitle, interviewTime, interviewEndTime, calendarDetails, calendarLocation) : null;
+
+  const handleStartAssessment = () => {
+    navigate('/assessment', { state: { applicant: application } });
+  };
   
+  const showAssessmentButton = application.status === 'Shortlisted';
+
   return (
     <div className="p-8">
       <button onClick={onBack} className="flex items-center text-gray-600 hover:text-gray-900 transition-colors duration-200">
@@ -131,6 +145,21 @@ export default function ApplicationDetail({ application, onBack }) {
                 Tambahkan ke Google Kalender
               </a>
             )}
+          </div>
+        )}
+        
+        {showAssessmentButton && (
+          <div className="mt-6 p-4 bg-teal-100 rounded-lg border-l-4 border-teal-500 text-teal-800">
+            <h4 className="font-bold">Informasi Asesmen</h4>
+            <p className="mt-2 text-sm">
+              {statusInfo.actionMessage}
+            </p>
+            <button
+              onClick={handleStartAssessment}
+              className="mt-4 inline-flex items-center px-6 py-3 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-teal-600 hover:bg-teal-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-teal-500"
+            >
+              Mulai Asesmen
+            </button>
           </div>
         )}
         

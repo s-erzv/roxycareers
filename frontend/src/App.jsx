@@ -1,6 +1,6 @@
 import React from 'react';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
  
 import Auth from './pages/Auth';
 import Home from './pages/Home';
@@ -8,7 +8,8 @@ import AdminDashboard from './pages/AdminDashboard';
 import CandidateDashboard from './pages/CandidateDashboard';
 import JobFormPage from './pages/JobFormPage';
 import InterviewSchedulePage from './pages/InterviewSchedulePage';
- 
+import AssessmentPage from './pages/AssessmentPage'; // Import AssessmentPage
+
 const Header = () => {
   const { userProfile, signOut } = useAuth();
   
@@ -56,7 +57,8 @@ const Header = () => {
  
 const AppRoutes = () => {
   const { session, userProfile, loading } = useAuth();
-  
+  const location = useLocation();
+
   if (loading) {
     return (
       <div className="flex justify-center items-center h-screen bg-gray-100">
@@ -76,6 +78,10 @@ const AppRoutes = () => {
           <Route path="/" element={<Home />} />
           <Route path="/home" element={<Home />} />
           <Route path="/dashboard" element={<CandidateDashboard />} />
+          <Route 
+            path="/assessment" 
+            element={location.state?.applicant ? <AssessmentPage applicant={location.state.applicant} onBack={() => window.history.back()} /> : <Navigate to="/dashboard" />} 
+          />
           <Route path="*" element={<Navigate to="/home" />} />
         </Routes>
       );
