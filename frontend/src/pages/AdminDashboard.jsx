@@ -84,7 +84,6 @@ export default function AdminDashboard() {
   const [selectedApplicant, setSelectedApplicant] = useState(null);
   const navigate = useNavigate();
 
-  // Fungsi untuk memanggil rescreening dari backend
   const handleRescreening = async (applicantId, onRescreenSuccess) => {
     try {
       const response = await fetch('http://localhost:8000/api/rescreen-applicant', {
@@ -100,10 +99,12 @@ export default function AdminDashboard() {
         throw new Error(errorData.error);
       }
       
+      const resultData = await response.json();
+      
       alert('Rescreening berhasil! Status pelamar akan diperbarui.');
-      // Panggil callback yang dikirimkan dari komponen utama
+      
       if (onRescreenSuccess) {
-        onRescreenSuccess(); 
+        onRescreenSuccess(resultData);
       }
     } catch (error) {
       alert('Gagal melakukan rescreening: ' + error.message);
@@ -111,15 +112,29 @@ export default function AdminDashboard() {
   };
 
   const handleRescreeningAndRefresh = async (applicantId) => {
-    await handleRescreening(applicantId, () => {
-      // Callback untuk memuat ulang data pelamar setelah rescreening berhasil
-      if (selectedJob) {
-        fetchApplicants(selectedJob.id);
-      }
+    await handleRescreening(applicantId, (resultData) => {
+      const updatedApplicants = applicants.map(app => 
+        app.id === applicantId ? { 
+          ...app, 
+          status: resultData.applicant_status,
+          auto_screening_status: resultData.new_status,
+          ai_score: resultData.ai_score,
+          final_score: resultData.final_score
+        } : app
+      );
+      setApplicants(updatedApplicants);
+
+      setSelectedApplicant(prev => prev?.id === applicantId ? {
+        ...prev, 
+        status: resultData.applicant_status,
+        auto_screening_status: resultData.new_status,
+        ai_score: resultData.ai_score,
+        final_score: resultData.final_score
+      } : prev);
+      
     });
   };
 
-  // Function to go back to jobs list
   const handleBackToJobs = () => {
     setView('list');
     setSelectedJob(null);

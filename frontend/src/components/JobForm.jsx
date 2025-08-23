@@ -2,9 +2,12 @@ import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faTrash } from '@fortawesome/free-solid-svg-icons';
+import axios from 'axios';
 
 export default function JobForm({ onClose, onJobAdded, jobToEdit }) {
   const [loading, setLoading] = useState(false);
+  const [schedulingStatus, setSchedulingStatus] = useState(null);
+
   const [formData, setFormData] = useState({
     title: '',
     company: '',
@@ -17,7 +20,13 @@ export default function JobForm({ onClose, onJobAdded, jobToEdit }) {
     apply_deadline: '',
     recruitment_process_type: '',
     interview_details: null,
-    assessment_details: null
+    assessment_details: null,
+    // Menambahkan state baru untuk parameter penjadwalan
+    schedule_start_date: '',
+    schedule_end_date: '',
+    daily_start_time: '',
+    daily_end_time: '',
+    duration_per_interview_minutes: 60,
   });
 
   const templateFields = [
@@ -30,10 +39,10 @@ export default function JobForm({ onClose, onJobAdded, jobToEdit }) {
 
   useEffect(() => {
     if (jobToEdit) {
-      const customFieldsOnly = jobToEdit.custom_fields.filter(field => 
+      const customFieldsOnly = jobToEdit.custom_fields.filter(field =>
         !templateFields.some(templateField => templateField.label === field.label)
       );
-      
+
       setFormData({
         title: jobToEdit.title ?? '',
         company: jobToEdit.company ?? '',
@@ -47,6 +56,12 @@ export default function JobForm({ onClose, onJobAdded, jobToEdit }) {
         recruitment_process_type: jobToEdit.recruitment_process_type ?? '',
         interview_details: jobToEdit.interview_details ?? null,
         assessment_details: jobToEdit.assessment_details ?? null,
+        // Mengisi state penjadwalan dari data pekerjaan
+        schedule_start_date: jobToEdit.schedule_start_date ?? '',
+        schedule_end_date: jobToEdit.schedule_end_date ?? '',
+        daily_start_time: jobToEdit.daily_start_time ?? '',
+        daily_end_time: jobToEdit.daily_end_time ?? '',
+        duration_per_interview_minutes: jobToEdit.duration_per_interview_minutes ?? 60,
       });
     } else {
       setFormData({
@@ -61,7 +76,12 @@ export default function JobForm({ onClose, onJobAdded, jobToEdit }) {
         apply_deadline: '',
         recruitment_process_type: '',
         interview_details: null,
-        assessment_details: null
+        assessment_details: null,
+        schedule_start_date: '',
+        schedule_end_date: '',
+        daily_start_time: '',
+        daily_end_time: '',
+        duration_per_interview_minutes: 60,
       });
     }
   }, [jobToEdit]);
@@ -71,7 +91,7 @@ export default function JobForm({ onClose, onJobAdded, jobToEdit }) {
     newFields[index][event.target.name] = event.target.value;
     setFormData({ ...formData, custom_fields: newFields });
   };
-  
+
   const handleAddCustomField = () => {
     setFormData({
       ...formData,
@@ -81,12 +101,12 @@ export default function JobForm({ onClose, onJobAdded, jobToEdit }) {
       ],
     });
   };
-  
+
   const handleRemoveCustomField = (index) => {
     const newFields = formData.custom_fields.filter((_, i) => i !== index);
     setFormData({ ...formData, custom_fields: newFields });
   };
-  
+
   const handleDetailChange = (e, detailType) => {
     setFormData({
       ...formData,
@@ -102,7 +122,7 @@ export default function JobForm({ onClose, onJobAdded, jobToEdit }) {
     newFields[index].required = !newFields[index].required;
     setFormData({ ...formData, custom_fields: newFields });
   };
-
+  
   const handleAutoScreenChange = (index) => {
     const newFields = [...formData.custom_fields];
     const isCurrentlyAuto = newFields[index].is_auto;
@@ -113,31 +133,52 @@ export default function JobForm({ onClose, onJobAdded, jobToEdit }) {
     setFormData({ ...formData, custom_fields: newFields });
   };
 
+  const handleAutoSchedule = async (jobId) => {
+    setSchedulingStatus('loading');
+    try {
+      const response = await axios.post(`http://127.0.0.1:8000/api/jobs/${jobId}/schedule/`);
+      console.log("Scheduling response:", response.data);
+      setSchedulingStatus('success');
+    } catch (error) {
+      console.error("Scheduling error:", error);
+      setSchedulingStatus('error');
+    }
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
+    setSchedulingStatus(null); // Reset status sebelum memproses
 
     const { custom_fields, ...restOfData } = formData;
-    
-    const filteredCustomFields = custom_fields.filter(field => 
+    const filteredCustomFields = custom_fields.filter(field =>
       !(field.is_auto && (!field.criteria || field.criteria.trim() === ''))
     );
-    
-    // Perbaikan utama: Mengirim semua properti bidang, termasuk is_auto dan is_default
     const allFields = [...templateFields, ...filteredCustomFields];
-    
+
     const dataToSave = {
       ...restOfData,
       custom_fields: allFields,
     };
-    
+
     try {
+      let jobRecord;
       if (jobToEdit) {
-        await supabase.from('jobs').update(dataToSave).eq('id', jobToEdit.id);
+        const { data, error } = await supabase.from('jobs').update(dataToSave).eq('id', jobToEdit.id).select();
+        if (error) throw error;
+        jobRecord = data[0];
       } else {
-        await supabase.from('jobs').insert([dataToSave]);
+        const { data, error } = await supabase.from('jobs').insert([dataToSave]).select();
+        if (error) throw error;
+        jobRecord = data[0];
       }
+
+      if (jobRecord && jobRecord.recruitment_process_type === 'interview_scheduling') {
+        await handleAutoSchedule(jobRecord.id);
+      }
+      
       onJobAdded();
+
     } catch (error) {
       console.error('Error saat menyimpan lowongan:', error);
       alert('Gagal menyimpan lowongan.');
@@ -253,9 +294,9 @@ export default function JobForm({ onClose, onJobAdded, jobToEdit }) {
 
         <div className="bg-gray-50 p-4 rounded-lg">
           <h4 className="text-lg font-bold text-gray-800 mb-4">Kriteria Screening</h4>
-          
+
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            
+
             <div>
               <h5 className="text-md font-semibold text-gray-700 mb-3">Kriteria Tambahan</h5>
               {formData.custom_fields.length > 0 ? (
@@ -426,17 +467,79 @@ export default function JobForm({ onClose, onJobAdded, jobToEdit }) {
         {formData.recruitment_process_type === 'interview_scheduling' && (
           <div className="bg-gray-50 p-4 rounded-lg">
             <h4 className="text-lg font-bold mb-4">Detail Wawancara</h4>
-            <div>
-              <label className="block text-gray-700 text-sm mb-2">Nama Kontak</label>
-              <input
-                type="text"
-                name="contact_person"
-                value={formData.interview_details?.contact_person || ''}
-                onChange={(e) => handleDetailChange(e, 'interview_details')}
-                placeholder="Nama kontak yang dapat dihubungi"
-                className="w-full p-2 border rounded-lg"
-                required
-              />
+            <div className="grid grid-cols-2 gap-4 mb-4">
+              <div>
+                <label className="block text-gray-700 text-sm mb-2">Nama Kontak</label>
+                <input
+                  type="text"
+                  name="contact_person"
+                  value={formData.interview_details?.contact_person || ''}
+                  onChange={(e) => handleDetailChange(e, 'interview_details')}
+                  placeholder="Nama kontak yang dapat dihubungi"
+                  className="w-full p-2 border rounded-lg"
+                  required
+                />
+              </div>
+            </div>
+            {/* Input baru untuk Penjadwalan Otomatis */}
+            <h4 className="text-lg font-bold mb-2">Pengaturan Penjadwalan Otomatis</h4>
+            <p className="text-gray-600 text-sm mb-4">Isi detail ini agar sistem bisa menjadwalkan semua kandidat shortlisted secara otomatis setelah Anda menyimpan lowongan ini.</p>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-gray-700 text-sm mb-2">Tanggal Mulai</label>
+                <input
+                  type="date"
+                  name="schedule_start_date"
+                  value={formData.schedule_start_date}
+                  onChange={(e) => setFormData({ ...formData, schedule_start_date: e.target.value })}
+                  className="w-full p-2 border rounded-lg"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-gray-700 text-sm mb-2">Tanggal Selesai</label>
+                <input
+                  type="date"
+                  name="schedule_end_date"
+                  value={formData.schedule_end_date}
+                  onChange={(e) => setFormData({ ...formData, schedule_end_date: e.target.value })}
+                  className="w-full p-2 border rounded-lg"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-gray-700 text-sm mb-2">Waktu Mulai Harian</label>
+                <input
+                  type="time"
+                  name="daily_start_time"
+                  value={formData.daily_start_time}
+                  onChange={(e) => setFormData({ ...formData, daily_start_time: e.target.value })}
+                  className="w-full p-2 border rounded-lg"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-gray-700 text-sm mb-2">Waktu Selesai Harian</label>
+                <input
+                  type="time"
+                  name="daily_end_time"
+                  value={formData.daily_end_time}
+                  onChange={(e) => setFormData({ ...formData, daily_end_time: e.target.value })}
+                  className="w-full p-2 border rounded-lg"
+                  required
+                />
+              </div>
+              <div className="md:col-span-2">
+                <label className="block text-gray-700 text-sm mb-2">Durasi Per Wawancara (menit)</label>
+                <input
+                  type="number"
+                  name="duration_per_interview_minutes"
+                  value={formData.duration_per_interview_minutes}
+                  onChange={(e) => setFormData({ ...formData, duration_per_interview_minutes: parseInt(e.target.value, 10) })}
+                  className="w-full p-2 border rounded-lg"
+                  required
+                />
+              </div>
             </div>
           </div>
         )}
@@ -485,6 +588,13 @@ export default function JobForm({ onClose, onJobAdded, jobToEdit }) {
           </button>
         </div>
       </form>
+
+      {/* Menampilkan status penjadwalan di luar form */}
+      <div className="mt-4">
+        {schedulingStatus === 'loading' && <p className="text-blue-500">Sedang menjadwalkan...</p>}
+        {schedulingStatus === 'success' && <p className="text-green-500">✅ Penjadwalan berhasil! Silakan periksa dashboard untuk melihat jadwal.</p>}
+        {schedulingStatus === 'error' && <p className="text-red-500">❌ Gagal menjadwalkan. Silakan coba lagi.</p>}
+      </div>
     </div>
   );
 }

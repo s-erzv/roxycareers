@@ -34,6 +34,9 @@ export default function CandidateDashboard() {
             recruitment_process_type,
             interview_details,
             assessment_details
+          ),
+          schedule (
+            interview_time
           )
         `)
         .eq('user_id', session.user.id)
@@ -56,7 +59,7 @@ export default function CandidateDashboard() {
         return { label: 'Lamaran Terkirim', color: 'bg-blue-100 text-blue-800' };
       case 'Shortlisted':
         return { label: 'Lolos Seleksi Berkas', color: 'bg-green-100 text-green-800' };
-      case 'Scheduled for Interview':
+      case 'scheduled':
         return { label: 'Jadwal Interview', color: 'bg-yellow-100 text-yellow-800' };
       case 'Interviewed':
         return { label: 'Menunggu Pengumuman', color: 'bg-indigo-100 text-indigo-800' };
@@ -108,6 +111,11 @@ export default function CandidateDashboard() {
                   <span className={`px-3 py-1 rounded-full text-sm font-semibold ${statusDisplay.color}`}>
                     {statusDisplay.label}
                   </span>
+                  {app.schedule && app.schedule.interview_time && (
+                    <span className="ml-4 text-sm text-gray-600">
+                      Jadwal: {new Date(app.schedule.interview_time).toLocaleString()}
+                    </span>
+                  )}
                   <span className="text-xs text-gray-400 ml-auto">
                     Melamar pada: {new Date(app.created_at).toLocaleDateString()}
                   </span>

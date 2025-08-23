@@ -6,6 +6,13 @@ from applications.supabase_client import supabase
 from applications.auto_screening import preprocess_answers, run_auto_screening
 from applications.cv_parser import extract_text_from_pdf, extract_text_from_docx, parse_cv_text
 from applications.model_utils import get_ai_score
+from django.shortcuts import render
+from rest_framework.decorators import api_view
+from rest_framework.response import Response
+from datetime import datetime, timedelta, date, time
+import logging
+
+logger = logging.getLogger(__name__)
 
 @csrf_exempt
 def apply(request):
@@ -222,8 +229,9 @@ def rescreen_applicant(request):
                 applicant_status = 'Needs Review'
             
             try:
-                print(f"[RESCREEN] Memperbarui status pelamar menjadi '{new_status}' dan skor menjadi '{final_score}' di Supabase...")
+                print(f"[RESCREEN] Memperbarui status pelamar menjadi '{applicant_status}' di Supabase...")
                 supabase.from_('applicants').update({
+                    'status': applicant_status,
                     'auto_screening_status': new_status,
                     'auto_screening_log': screening_result['log'],
                     'ai_score': int(round(ai_score['score'])) if ai_score and ai_score['score'] is not None else None,
@@ -235,9 +243,89 @@ def rescreen_applicant(request):
                 return JsonResponse({'error': f'Failed to update applicant status: {e.message}'}, status=500)
                 
             print("[RESCREEN] Rescreening berhasil diproses.")
-            return JsonResponse({'message': 'Auto-screening completed successfully.', 'new_status': new_status, 'ai_score': int(round(ai_score['score'])), 'final_score': int(round(final_score))})
+            return JsonResponse({
+                'message': 'Auto-screening completed successfully.', 
+                'new_status': new_status, 
+                'applicant_status': applicant_status,
+                'ai_score': int(round(ai_score['score'])), 
+                'final_score': int(round(final_score))
+            })
         
         except Exception as e:
             print(f"[RESCREEN] Terjadi kesalahan tak terduga: {e}")
             return JsonResponse({'error': str(e)}, status=500)
     return HttpResponse(status=405)
+
+@api_view(['POST'])
+def auto_schedule_interviews(request, job_id):
+    try:
+        # Mengubah ini untuk mengambil data dari Supabase, bukan database lokal Django
+        job_response = supabase.from_('jobs').select('*').eq('id', job_id).single().execute()
+        job_data = job_response.data
+        
+        if not job_data:
+            return Response({"error": "Lowongan pekerjaan tidak ditemukan di Supabase."}, status=404)
+
+        # Validasi data input dari job yang diambil dari Supabase
+        if not all([
+            job_data.get('schedule_start_date'),
+            job_data.get('schedule_end_date'),
+            job_data.get('daily_start_time'),
+            job_data.get('daily_end_time'),
+            job_data.get('duration_per_interview_minutes')
+        ]):
+            return Response({"error": "Parameter penjadwalan pekerjaan tidak diatur sepenuhnya di Supabase."}, status=400)
+
+        # Ambil pelamar yang telah di-shortlist dari Supabase, bukan dari model Django
+        applicants_response = supabase.from_('applicants').select('*').eq('job_id', job_id).eq('auto_screening_status', 'Lolos').order('created_at').execute()
+        applicants_data = applicants_response.data
+
+        if not applicants_data:
+            return Response({"message": "Tidak ada kandidat dengan status Lolos."}, status=200)
+
+        # Konversi data tanggal dan waktu dari string ke objek datetime
+        start_date = datetime.strptime(job_data['schedule_start_date'], '%Y-%m-%d').date()
+        end_date = datetime.strptime(job_data['schedule_end_date'], '%Y-%m-%d').date()
+        daily_start_time = datetime.strptime(job_data['daily_start_time'], '%H:%M:%S').time()
+        daily_end_time = datetime.strptime(job_data['daily_end_time'], '%H:%M:%S').time()
+        duration = timedelta(minutes=job_data['duration_per_interview_minutes'])
+
+        current_datetime = datetime.combine(start_date, daily_start_time)
+        
+        scheduled_applicants = []
+        for applicant in applicants_data:
+            while current_datetime.date() <= end_date:
+                daily_end_datetime = datetime.combine(current_datetime.date(), daily_end_time)
+                
+                if current_datetime + duration <= daily_end_datetime:
+                    # Buat jadwal baru di Supabase
+                    schedule_data = {
+                        'applicant_id': applicant['id'],
+                        'job_id': job_id,
+                        'interview_time': current_datetime.isoformat()
+                    }
+                    supabase.from_('schedules').insert(schedule_data).execute()
+                    
+                    # Perbarui status pelamar di Supabase
+                    supabase.from_('applicants').update({'status': 'scheduled'}).eq('id', applicant['id']).execute()
+                    
+                    scheduled_applicants.append({
+                        "name": applicant['name'],
+                        "interview_time": current_datetime.isoformat()
+                    })
+
+                    current_datetime += duration
+                    break
+                else:
+                    current_datetime = datetime.combine(current_datetime.date() + timedelta(days=1), daily_start_time)
+            else:
+                return Response({"message": f"Penjadwalan selesai. Tidak semua kandidat berhasil dijadwalkan. {len(scheduled_applicants)} kandidat berhasil dijadwalkan."}, status=200)
+
+        return Response({"message": "Penjadwalan berhasil.", "schedules": scheduled_applicants}, status=200)
+
+    except PostgrestAPIError as e:
+        logger.error(f"Error Supabase saat auto-scheduling: {e.message}")
+        return Response({"error": f"Error Supabase: {e.message}"}, status=500)
+    except Exception as e:
+        logger.error(f"Error tak terduga saat auto-scheduling: {e}")
+        return Response({"error": str(e)}, status=500)

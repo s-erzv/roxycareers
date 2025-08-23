@@ -31,7 +31,7 @@ def run_auto_screening(job_custom_fields, applicant_answers, ai_score=None):
     print("\n[AUTO-SCREENING] Memulai proses screening otomatis...")
 
     # Dapatkan ambang batas skor AI dari custom fields lowongan
-    ai_score_threshold = 70  # Nilai default jika tidak ada di kriteria
+    ai_score_threshold = 50  # Nilai default jika tidak ada di kriteria
     for field in job_custom_fields:
         if field.get('label') == 'ai_score_threshold' and field.get('criteria'):
             try:
