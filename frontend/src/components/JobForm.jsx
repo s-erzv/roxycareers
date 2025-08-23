@@ -175,50 +175,60 @@ export default function JobForm({ onClose, onJobAdded, jobToEdit }) {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
-    setSchedulingStatus(null); // Reset status sebelum memproses
-
-    const { custom_fields, ...restOfData } = formData;
-    const filteredCustomFields = custom_fields.filter(field =>
-      !(field.is_auto && (!field.criteria || field.criteria.trim() === ''))
-    );
-    const allFields = [...templateFields, ...filteredCustomFields];
 
     try {
-      const customQuestionIds = [];
-      for (const q of customQuestions) {
-          const res = await axios.post('http://127.0.0.1:8000/api/question-bank/', q);
-          customQuestionIds.push(res.data.id);
-      }
+        // 1. Buat pertanyaan kustom di bank soal terlebih dahulu dan kumpulkan ID-nya
+        const customQuestionIds = [];
+        for (const q of customQuestions) {
+            const res = await axios.post('http://127.0.0.1:8000/api/question-bank/', q);
+            customQuestionIds.push(res.data.id);
+        }
+
+        // 2. Buat objek data untuk disimpan ke tabel 'jobs'
+        const { custom_fields, ...restOfData } = formData;
+        const filteredCustomFields = custom_fields.filter(field =>
+          !(field.is_auto && (!field.criteria || field.criteria.trim() === ''))
+        );
+        const allFields = [...templateFields, ...filteredCustomFields];
+        
+        const dataToSave = {
+            ...restOfData,
+            custom_fields: allFields,
+            assessment_template: selectedTemplate || null,
+        };
+
+        // 3. Simpan atau perbarui pekerjaan utama
+        let jobResponse;
+        if (jobToEdit) {
+            jobResponse = await supabase.from('jobs').update(dataToSave).eq('id', jobToEdit.id).select();
+        } else {
+            jobResponse = await supabase.from('jobs').insert([dataToSave]).select();
+        }
+        
+        if (!jobResponse.data) {
+          throw new Error('No data returned from job save operation.');
+        }
+
+        const jobId = jobResponse.data[0].id;
+
+        // 4. Hubungkan pekerjaan dengan pertanyaan kustom yang baru dibuat
+        for (const questionId of customQuestionIds) {
+            await axios.post(`http://127.0.0.1:8000/api/jobs/${jobId}/questions/`, { question_id: questionId });
+        }
+
+        // 5. Jalankan penjadwalan otomatis jika diperlukan
+        if (jobResponse.data[0].recruitment_process_type === 'interview_scheduling') {
+            await handleAutoSchedule(jobId);
+        }
       
-      const dataToSave = {
-          ...restOfData,
-          custom_fields: allFields,
-          assessment_template: selectedTemplate || null,
-          custom_questions: customQuestionIds,
-      };
-
-      let jobRecord;
-      if (jobToEdit) {
-        const { data, error } = await supabase.from('jobs').update(dataToSave).eq('id', jobToEdit.id).select();
-        if (error) throw error;
-        jobRecord = data[0];
-      } else {
-        const { data, error } = await supabase.from('jobs').insert([dataToSave]).select();
-        if (error) throw error;
-        jobRecord = data[0];
-      }
-
-      if (jobRecord && jobRecord.recruitment_process_type === 'interview_scheduling') {
-        await handleAutoSchedule(jobRecord.id);
-      }
-      
-      onJobAdded();
-
+        onJobAdded();
+        onClose();
+        alert('Pekerjaan berhasil disimpan!');
     } catch (error) {
-      console.error('Error saat menyimpan lowongan:', error);
-      alert('Gagal menyimpan lowongan.');
+        console.error('Failed to save job:', error);
+        alert(`Gagal menyimpan pekerjaan. Cek konsol untuk detail: ${error.message}`);
     } finally {
-      setLoading(false);
+        setLoading(false);
     }
   };
 

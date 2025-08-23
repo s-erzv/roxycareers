@@ -422,117 +422,182 @@ def request_reschedule_applicant(request):
 # VIEW BARU: Manajemen Bank Soal (Questions)
 @api_view(['POST', 'GET'])
 def manage_question_bank(request):
-    if request.method == 'POST':
-        data = request.data
-        question = Question.objects.create(
-            text=data.get('text'),
-            question_type=data.get('question_type'),
-            options=data.get('options'),
-            solution=data.get('solution'),
-        )
-        return Response({"message": "Question created in bank successfully.", "id": question.id}, status=status.HTTP_201_CREATED)
-    
-    elif request.method == 'GET':
-        questions = Question.objects.all().values()
-        return Response(list(questions), status=status.HTTP_200_OK)
+    try:
+        if request.method == 'POST':
+            data = request.data
+            response = supabase.from_('questions').insert({
+                'text': data.get('text'),
+                'question_type': data.get('question_type'),
+                'options': data.get('options'),
+                'solution': data.get('solution'),
+            }).execute()
+            
+            question_id = response.data[0]['id']
+            return Response({"message": "Question created in bank successfully.", "id": question_id}, status=status.HTTP_201_CREATED)
+        
+        elif request.method == 'GET':
+            response = supabase.from_('questions').select('*').execute()
+            questions = response.data
+            return Response(questions, status=status.HTTP_200_OK)
+    except PostgrestAPIError as e:
+        logger.error(f"Error Supabase saat mengelola pertanyaan: {e.message}")
+        return Response({"error": f"Error Supabase: {e.message}"}, status=500)
+    except Exception as e:
+        logger.error(f"Error tak terduga: {e}")
+        return Response({"error": str(e)}, status=500)
+
 
 # VIEW BARU: Manajemen Template
 @api_view(['POST', 'GET'])
 def manage_assessment_templates(request):
-    if request.method == 'POST':
-        data = request.data
-        template = AssessmentTemplate.objects.create(
-            name=data.get('name'),
-            description=data.get('description')
-        )
-        return Response({"message": "Template created successfully.", "id": template.id}, status=status.HTTP_201_CREATED)
-    
-    elif request.method == 'GET':
-        templates = AssessmentTemplate.objects.all().values()
-        return Response(list(templates), status=status.HTTP_200_OK)
+    try:
+        if request.method == 'POST':
+            data = request.data
+            response = supabase.from_('assessment_templates').insert({
+                'name': data.get('name'),
+                'description': data.get('description')
+            }).execute()
+            template_id = response.data[0]['id']
+            return Response({"message": "Template created successfully.", "id": template_id}, status=status.HTTP_201_CREATED)
+        
+        elif request.method == 'GET':
+            response = supabase.from_('assessment_templates').select('*').execute()
+            templates = response.data
+            return Response(templates, status=status.HTTP_200_OK)
+    except PostgrestAPIError as e:
+        logger.error(f"Error Supabase saat mengelola template: {e.message}")
+        return Response({"error": f"Error Supabase: {e.message}"}, status=500)
+    except Exception as e:
+        logger.error(f"Error tak terduga: {e}")
+        return Response({"error": str(e)}, status=500)
 
 # VIEW BARU: Mengelola Pertanyaan di dalam Template
 @api_view(['POST'])
 def add_question_to_template(request, template_id):
     try:
-        template = AssessmentTemplate.objects.get(id=template_id)
         question_id = request.data.get('question_id')
-        question = Question.objects.get(id=question_id)
-        template.questions.add(question)
+        
+        # Masukkan ke tabel perantara template_questions
+        supabase.from_('template_questions').insert({
+            'template_id': str(template_id),  # <--- Perbaikan di sini
+            'question_id': question_id
+        }).execute()
+        
         return Response({"message": "Question added to template successfully."}, status=status.HTTP_200_OK)
-    except (AssessmentTemplate.DoesNotExist, Question.DoesNotExist) as e:
-        return Response({"error": str(e)}, status=status.HTTP_404_NOT_FOUND)
+    except PostgrestAPIError as e:
+        logger.error(f"Error Supabase saat menambahkan pertanyaan ke template: {e.message}")
+        return Response({"error": f"Error Supabase: {e.message}"}, status=404)
+    except Exception as e:
+        logger.error(f"Error tak terduga: {e}")
+        return Response({"error": str(e)}, status=500)
+
+# VIEW BARU: Mengelola Pertanyaan Khusus Pekerjaan
+@api_view(['POST'])
+def add_custom_question_to_job(request, job_id):
+    try:
+        question_id = request.data.get('question_id')
+        
+        # Masukkan ke tabel perantara job_custom_questions
+        supabase.from_('job_custom_questions').insert({
+            'job_id': str(job_id),
+            'question_id': question_id
+        }).execute()
+        
+        return Response({"message": "Question added to job successfully."}, status=status.HTTP_200_OK)
+    except PostgrestAPIError as e:
+        logger.error(f"Error Supabase saat menambahkan pertanyaan ke pekerjaan: {e.message}")
+        return Response({"error": f"Error Supabase: {e.message}"}, status=404)
+    except Exception as e:
+        logger.error(f"Error tak terduga: {e}")
+        return Response({"error": str(e)}, status=500)
 
 # VIEW BARU: Mengambil Pertanyaan untuk Asesmen Job
 @api_view(['GET'])
 def get_job_assessment_questions(request, job_id):
     try:
-        job = Job.objects.get(id=job_id)
+        job_response = supabase.from_('jobs').select('assessment_template_id, custom_fields').eq('id', job_id).single().execute()
+        job_data = job_response.data
+        
+        if not job_data:
+            return Response({"error": "Job not found."}, status=status.HTTP_404_NOT_FOUND)
+        
         questions = []
         
-        if job.assessment_template:
-            template_questions = job.assessment_template.questions.all()
-            questions.extend(template_questions)
+        # Ambil pertanyaan dari template jika ada
+        if job_data.get('assessment_template_id'):
+            template_questions_response = supabase.from_('template_questions').select('question_id').eq('template_id', job_data['assessment_template_id']).execute()
+            template_question_ids = [q['question_id'] for q in template_questions_response.data]
+            
+            if template_question_ids:
+                template_questions_data = supabase.from_('questions').select('*').in_('id', template_question_ids).execute()
+                questions.extend(template_questions_data.data)
         
-        custom_questions = job.custom_questions.all()
-        questions.extend(custom_questions)
-        
-        formatted_questions = [{
-            'id': q.id, 
-            'text': q.text, 
-            'question_type': q.question_type, 
-            'options': q.options,
-            'solution': q.solution,
-        } for q in questions]
-        
-        return Response(formatted_questions, status=status.HTTP_200_OK)
+        # Ambil pertanyaan khusus dari custom_fields (jika ada)
+        custom_question_ids = job_data.get('custom_fields', {}).get('custom_questions', [])
+        if custom_question_ids:
+            custom_questions_data = supabase.from_('questions').select('*').in_('id', custom_question_ids).execute()
+            questions.extend(custom_questions_data.data)
+            
+        return Response(questions, status=status.HTTP_200_OK)
 
-    except Job.DoesNotExist:
-        return Response({"error": "Job not found."}, status=status.HTTP_404_NOT_FOUND)
+    except PostgrestAPIError as e:
+        logger.error(f"Error Supabase saat mengambil pertanyaan job: {e.message}")
+        return Response({"error": f"Error Supabase: {e.message}"}, status=500)
+    except Exception as e:
+        logger.error(f"Error tak terduga: {e}")
+        return Response({"error": str(e)}, status=500)
+
 
 # Modifikasi fungsi submit_assessment
 @api_view(['POST'])
 def submit_assessment(request, applicant_id):
     try:
-        applicant = Applicant.objects.get(id=applicant_id)
-    except Applicant.DoesNotExist:
-        return Response({"error": "Applicant not found."}, status=status.HTTP_404_NOT_FOUND)
+        applicant_response = supabase.from_('applicants').select('*').eq('id', applicant_id).single().execute()
+        applicant_data = applicant_response.data
+        if not applicant_data:
+            return Response({"error": "Applicant not found."}, status=status.HTTP_404_NOT_FOUND)
+            
+        data = request.data
+        answers = data.get('answers', [])
         
-    data = request.data
-    answers = data.get('answers', [])
-    
-    requires_manual_review = False
-    total_score = 0
-    total_questions = len(answers)
+        requires_manual_review = False
+        total_score = 0
+        total_questions = len(answers)
 
-    with transaction.atomic():
-        AssessmentAnswer.objects.filter(applicant=applicant).delete()
+        # Hapus jawaban lama untuk mencegah duplikasi
+        supabase.from_('assessment_answers').delete().eq('applicant_id', applicant_id).execute()
+        
+        answers_to_insert = []
         
         for answer_data in answers:
             question_id = answer_data.get('question_id')
             answer_text = answer_data.get('answer')
             
             try:
-                question = Question.objects.get(id=question_id)
-            except Question.DoesNotExist:
+                question_response = supabase.from_('questions').select('question_type, solution').eq('id', question_id).single().execute()
+                question = question_response.data
+                if not question:
+                    return Response({"error": f"Question with ID {question_id} not found."}, status=status.HTTP_404_NOT_FOUND)
+            except PostgrestAPIError as e:
                 return Response({"error": f"Question with ID {question_id} not found."}, status=status.HTTP_404_NOT_FOUND)
+
 
             answer_score = 0
             is_correct = None
 
-            if question.question_type in MANUAL_REVIEW_TYPES:
+            if question.get('question_type') in MANUAL_REVIEW_TYPES:
                 requires_manual_review = True
                 is_correct = None
-            elif question.question_type == 'SINGLE_CHOICE' or question.question_type == 'MULTIPLE_CHOICE':
-                if answer_text == question.solution:
+            elif question.get('question_type') == 'SINGLE_CHOICE' or question.get('question_type') == 'MULTIPLE_CHOICE':
+                if answer_text == question.get('solution'):
                     is_correct = True
                     answer_score = 100
                 else:
                     is_correct = False
-            elif question.question_type == 'INTEGER_INPUT':
+            elif question.get('question_type') == 'INTEGER_INPUT':
                 try:
                     submitted_value = int(answer_text)
-                    correct_value = int(question.solution)
+                    correct_value = int(question.get('solution'))
                     if submitted_value == correct_value:
                         is_correct = True
                         answer_score = 100
@@ -544,74 +609,94 @@ def submit_assessment(request, applicant_id):
             
             total_score += answer_score
             
-            AssessmentAnswer.objects.create(
-                applicant=applicant,
-                question=question,
-                answer=answer_text,
-                is_correct=is_correct,
-                score=answer_score
-            )
-    
-    if requires_manual_review:
-        applicant.status = 'Assessment - Needs Review'
-    else:
-        applicant.status = 'Assessment - Completed'
-    
-    applicant.save()
-    
-    return Response({
-        "message": "Assessment submitted successfully.",
-        "status": applicant.status,
-        "total_score_auto_graded": total_score
-    }, status=status.HTTP_201_CREATED)
+            answers_to_insert.append({
+                'applicant_id': applicant_id,
+                'question_id': question_id,
+                'answer': answer_text,
+                'is_correct': is_correct,
+                'score': answer_score
+            })
+        
+        if answers_to_insert:
+            supabase.from_('assessment_answers').insert(answers_to_insert).execute()
+
+        new_status = 'Assessment - Completed'
+        if requires_manual_review:
+            new_status = 'Assessment - Needs Review'
+        
+        supabase.from_('applicants').update({
+            'status': new_status
+        }).eq('id', applicant_id).execute()
+        
+        return Response({
+            "message": "Assessment submitted successfully.",
+            "status": new_status,
+            "total_score_auto_graded": total_score
+        }, status=status.HTTP_201_CREATED)
+
+    except Exception as e:
+        logger.error(f"Error saat submit assessment: {e}")
+        return Response({"error": str(e)}, status=500)
 
 # VIEW BARU: Endpoint untuk admin melihat jawaban dan menilai
 @api_view(['GET', 'POST'])
 def review_assessment(request, applicant_id):
     try:
-        applicant = Applicant.objects.get(id=applicant_id)
-    except Applicant.DoesNotExist:
-        return Response({"error": "Applicant not found."}, status=status.HTTP_404_NOT_FOUND)
+        applicant_response = supabase.from_('applicants').select('name').eq('id', applicant_id).single().execute()
+        applicant_data = applicant_response.data
+        if not applicant_data:
+            return Response({"error": "Applicant not found."}, status=status.HTTP_404_NOT_FOUND)
+            
+        if request.method == 'GET':
+            all_answers_response = supabase.from_('assessment_answers').select('*, question:questions(*)').eq('applicant_id', applicant_id).execute()
+            all_answers = all_answers_response.data
+            
+            answers_to_review = []
+            auto_graded_scores = []
+            
+            for ans in all_answers:
+                question_type = ans['question']['question_type']
+                if question_type in MANUAL_REVIEW_TYPES:
+                    answers_to_review.append({
+                        'question_id': ans['question']['id'],
+                        'question_text': ans['question']['text'],
+                        'answer': ans['answer'],
+                        'type': question_type,
+                    })
+                else:
+                    auto_graded_scores.append({
+                        'question_text': ans['question']['text'],
+                        'score': ans['score'],
+                        'is_correct': ans['is_correct']
+                    })
+            
+            data_to_send = {
+                'applicant_name': applicant_data['name'],
+                'answers_to_review': answers_to_review,
+                'auto_graded_scores': auto_graded_scores
+            }
+            return Response(data_to_send, status=status.HTTP_200_OK)
 
-    if request.method == 'GET':
-        answers_to_review = AssessmentAnswer.objects.filter(applicant=applicant, question__question_type__in=MANUAL_REVIEW_TYPES)
-        auto_graded_answers = AssessmentAnswer.objects.filter(applicant=applicant).exclude(question__question_type__in=MANUAL_REVIEW_TYPES)
-        
-        data_to_send = {
-            'applicant_name': applicant.name,
-            'answers_to_review': [
-                {
-                    'question_id': ans.question.id,
-                    'question_text': ans.question.text,
-                    'answer': ans.answer,
-                    'type': ans.question.question_type,
-                } for ans in answers_to_review
-            ],
-            'auto_graded_scores': [
-                {'question_text': ans.question.text, 'score': ans.score, 'is_correct': ans.is_correct} for ans in auto_graded_answers
-            ]
-        }
-        return Response(data_to_send, status=status.HTTP_200_OK)
-
-    elif request.method == 'POST':
-        data = request.data
-        manual_scores = data.get('scores', {})
-        
-        with transaction.atomic():
+        elif request.method == 'POST':
+            data = request.data
+            manual_scores = data.get('scores', {})
+            
             for question_id, score in manual_scores.items():
-                try:
-                    answer_obj = AssessmentAnswer.objects.get(applicant=applicant, question_id=question_id)
-                    answer_obj.score = score
-                    answer_obj.is_correct = (score > 0)
-                    answer_obj.save()
-                except AssessmentAnswer.DoesNotExist:
-                    continue
+                supabase.from_('assessment_answers').update({
+                    'score': score,
+                    'is_correct': (score > 0)
+                }).eq('applicant_id', applicant_id).eq('question_id', question_id).execute()
 
-            all_answers = AssessmentAnswer.objects.filter(applicant=applicant)
-            final_score = sum(ans.score for ans in all_answers if ans.score is not None)
+            all_answers_response = supabase.from_('assessment_answers').select('score').eq('applicant_id', applicant_id).execute()
+            all_answers = all_answers_response.data
+            final_score = sum(ans['score'] for ans in all_answers if ans['score'] is not None)
             
-            applicant.status = 'Assessment - Reviewed'
-            applicant.final_score = final_score
-            applicant.save()
-            
-        return Response({"message": "Manual review completed.", "final_score": final_score}, status=status.HTTP_200_OK)
+            supabase.from_('applicants').update({
+                'status': 'Assessment - Reviewed',
+                'final_score': final_score
+            }).eq('id', applicant_id).execute()
+                
+            return Response({"message": "Manual review completed.", "final_score": final_score}, status=status.HTTP_200_OK)
+    except Exception as e:
+        logger.error(f"Error saat me-review assessment: {e}")
+        return Response({"error": str(e)}, status=500)
