@@ -93,7 +93,7 @@ StrEnum==0.4.15
 supabase==2.18.1
 supabase_auth==2.12.3
 supabase_functions==0.10.1
-thinc==8.3.6
+thinc==8.1.12
 threadpoolctl==3.6.0
 tqdm==4.67.1
 typer==0.16.1
