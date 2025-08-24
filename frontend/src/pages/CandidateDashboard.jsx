@@ -76,34 +76,44 @@ export default function CandidateDashboard() {
     fetchApplicationsAndSchedules();
   }, [session]);
 
-  const getStatusDisplay = (status) => {
-    switch (status) {
-      case 'Applied':
-        return { label: 'Lamaran Terkirim', color: 'bg-blue-100 text-blue-800' };
-      case 'Shortlisted':
-        return { label: 'Lolos Seleksi Berkas', color: 'bg-green-100 text-green-800' };
+  const getStatusTextAndColor = (status) => {
+    const normalizedStatus = status ? status.toLowerCase() : '';
+
+    switch (normalizedStatus) {
+      case 'applied':
+        return { text: 'Lamaran Terkirim', color: 'bg-blue-100 text-blue-800' };
+      case 'shortlisted':
+        return { text: 'Lolos Seleksi Berkas', color: 'bg-green-100 text-green-800' };
+      case 'assessment - needs review':
+        return { text: 'Menunggu Penilaian Manual', color: 'bg-orange-100 text-orange-800' };
+      case 'assessment - completed':
+        return { text: 'Asesmen Selesai', color: 'bg-indigo-100 text-indigo-800' };
+      case 'lolos assessment':
+        return { text: 'Lolos Asesmen', color: 'bg-green-100 text-green-800' };
+      case 'gagal assessment':
+        return { text: 'Gagal Asesmen', color: 'bg-red-100 text-red-800' };
       case 'scheduled':
-        return { label: 'Jadwal Interview', color: 'bg-yellow-100 text-yellow-800' };
-      case 'Interviewed':
-        return { label: 'Menunggu Pengumuman', color: 'bg-indigo-100 text-indigo-800' };
-      case 'Hired':
-        return { label: 'Diterima', color: 'bg-green-500 text-white' };
-      case 'Rejected':
-        return { label: 'Ditolak', color: 'bg-red-500 text-white' };
-      case 'Assessment - Completed':
-      case 'Assessment - Needs Review':
-      case 'Assessment - Reviewed':
-        return { label: 'Asesmen Selesai', color: 'bg-gray-400 text-white' };
-      case 'Lolos Assessment':
-        return { label: 'Lolos Asesmen', color: 'bg-green-500 text-white' };
-      case 'Gagal Assessment':
-        return { label: 'Gagal Asesmen', color: 'bg-red-500 text-white' };
+        return { text: 'Wawancara Terjadwal', color: 'bg-yellow-100 text-yellow-800' };
+      case 'interviewed':
+        return { text: 'Wawancara Selesai', color: 'bg-gray-400 text-white' };
+      case 'hired':
+        return { text: 'Hired', color: 'bg-teal-500 text-white' };
+      case 'rejected':
+        return { text: 'Tidak Lolos', color: 'bg-red-500 text-white' };
       default:
-        return { label: 'Status Tidak Diketahui', color: 'bg-gray-100 text-gray-800' };
+        return { text: 'Status Tidak Diketahui', color: 'bg-gray-100 text-gray-800' };
     }
   };
   
   if (selectedApplication) {
+    if (selectedApplication.isAssessment) {
+      return (
+        <AssessmentPage
+          application={selectedApplication}
+          onBack={() => setSelectedApplication(null)}
+        />
+      );
+    }
     return <ApplicationDetail application={selectedApplication} onBack={() => setSelectedApplication(null)} />;
   }
 
@@ -132,33 +142,39 @@ export default function CandidateDashboard() {
             let currentStatus = app.status;
             const interviewTime = app.schedules && app.schedules.length > 0 ? new Date(app.schedules[0].interview_time) : null;
             
-            // Logika untuk mengubah status tampilan secara dinamis
             if (currentStatus === 'scheduled' && interviewTime && (new Date().getTime() > (interviewTime.getTime() + 60 * 60 * 1000))) {
               currentStatus = 'Interviewed';
             }
 
-            const statusDisplay = getStatusDisplay(currentStatus);
+            const statusDisplay = getStatusTextAndColor(currentStatus);
             const formattedDate = interviewTime ? interviewTime.toLocaleDateString('en-US') : '';
             const formattedTime = interviewTime ? interviewTime.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) : '';
+            const isAssessmentAvailable = app.status === 'Shortlisted' || app.status === 'Applied';
 
             return (
               <div 
                 key={app.id} 
-                onClick={() => setSelectedApplication(app)}
+                onClick={() => {
+                  if (isAssessmentAvailable) {
+                    setSelectedApplication({ ...app, isAssessment: true });
+                  } else {
+                    setSelectedApplication(app);
+                  }
+                }}
                 className="bg-white rounded-xl shadow-lg p-6 border border-gray-200 cursor-pointer hover:shadow-xl transition-shadow duration-300"
               >
                 <h3 className="text-xl font-semibold text-gray-800">{app.jobs.title}</h3>
                 <p className="text-sm text-gray-500 mt-1">Perusahaan: {app.jobs.company}</p>
                 <div className="mt-4 flex items-center">
                   <span className={`px-3 py-1 rounded-full text-sm font-semibold ${statusDisplay.color}`}>
-                    {statusDisplay.label}
+                    {statusDisplay.text}
                   </span>
                   {app.status === 'scheduled' && interviewTime && (
                     <span className="ml-4 text-sm text-gray-600">
                       Jadwal: {formattedDate}, {formattedTime} WIB
                     </span>
                   )}
-                  {(app.status === 'Shortlisted' || app.status === 'Applied') && (
+                  {isAssessmentAvailable && (
                      <span className="ml-4 text-sm text-teal-600 font-semibold">
                        Asesmen Tersedia
                      </span>

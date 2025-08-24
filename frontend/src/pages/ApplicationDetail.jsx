@@ -1,5 +1,6 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { supabase } from '../supabaseClient';
 
 const getStatusMessage = (status) => {
   switch (status) {
@@ -31,7 +32,7 @@ const getStatusMessage = (status) => {
         color: 'bg-indigo-100 text-indigo-800',
         actionMessage: ''
       };
-    case 'Hired':
+    case 'hired':
       return {
         title: 'Anda Diterima!',
         message: 'Selamat! Anda telah diterima di Roxy Group. Kami akan segera menghubungi Anda untuk proses selanjutnya.',
@@ -112,6 +113,38 @@ export default function ApplicationDetail({ application, onBack }) {
     displayedStatus = 'Interviewed';
   }
 
+  const [assessmentAnswers, setAssessmentAnswers] = useState([]);
+  const [loadingAnswers, setLoadingAnswers] = useState(false);
+  const showAssessmentAnswers = application.status === 'Assessment - Completed' || application.status === 'Lolos Assessment' || application.status === 'Gagal Assessment' || application.status === 'Assessment - Needs Review' || application.status === 'hired';
+
+  useEffect(() => {
+    const fetchAnswers = async () => {
+      if (showAssessmentAnswers) {
+        setLoadingAnswers(true);
+        const { data, error } = await supabase
+          .from('assessment_answers')
+          .select(`
+            answer,
+            is_correct,
+            score,
+            questions (
+              text
+            )
+          `)
+          .eq('applicant_id', application.id);
+
+        if (error) {
+          console.error('Error fetching assessment answers:', error);
+        } else {
+          setAssessmentAnswers(data);
+        }
+        setLoadingAnswers(false);
+      }
+    };
+
+    fetchAnswers();
+  }, [application.id, showAssessmentAnswers]);
+
   const statusInfo = getStatusMessage(displayedStatus);
   const formattedDate = interviewTime ? interviewTime.toLocaleDateString('en-US') : '';
   const formattedTime = interviewTime ? interviewTime.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) : '';
@@ -126,7 +159,7 @@ export default function ApplicationDetail({ application, onBack }) {
     navigate('/assessment', { state: { applicant: application } });
   };
   
-  const showAssessmentButton = application.status === 'Shortlisted';
+  const showAssessmentButton = application.status === 'Shortlisted' || application.status === 'Applied';
 
   return (
     <div className="p-8">
@@ -194,6 +227,36 @@ export default function ApplicationDetail({ application, onBack }) {
             >
               Mulai Asesmen
             </button>
+          </div>
+        )}
+
+        {showAssessmentAnswers && (
+          <div className="mt-6">
+            <h3 className="text-xl font-semibold text-gray-800">Jawaban Asesmen Anda</h3>
+            {loadingAnswers ? (
+              <p className="text-sm text-gray-600 mt-2">Memuat jawaban...</p>
+            ) : assessmentAnswers.length > 0 ? (
+              <div className="mt-4 space-y-4">
+                {assessmentAnswers.map((item, index) => (
+                  <div key={index} className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+                    <p className="font-medium text-gray-700">Pertanyaan: {item.questions.text}</p>
+                    <p className="text-sm text-gray-600 mt-1">Jawaban Anda: {item.answer}</p>
+                    {item.is_correct !== null && (
+                      <p className="text-sm mt-1">
+                        Status: <span className={item.is_correct ? 'text-green-500 font-semibold' : 'text-red-500 font-semibold'}>{item.is_correct ? 'Benar' : 'Salah'}</span>
+                      </p>
+                    )}
+                    {item.score !== null && (
+                      <p className="text-sm mt-1">
+                        Skor: <strong>{item.score}</strong>
+                      </p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-gray-600 mt-2">Tidak ada jawaban asesmen yang ditemukan.</p>
+            )}
           </div>
         )}
         
