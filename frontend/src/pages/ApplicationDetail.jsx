@@ -180,6 +180,22 @@ export default function ApplicationDetail({ application, onBack }) {
         <p className="text-sm text-gray-500 mt-1">Perusahaan: {jobs.company}</p>
         <p className="text-sm text-gray-500">Melamar pada: {new Date(application.created_at).toLocaleDateString()}</p>
         
+        {/* Tambahan: Bagian untuk menampilkan Skor AI dan Alasan */}
+        {application.ai_score !== undefined && application.ai_score !== null && (
+          <div className="mt-6 p-4 bg-purple-100 rounded-lg border-l-4 border-purple-500 text-purple-800">
+            <h4 className="font-bold">Skor Screening AI</h4>
+            <p className="mt-2 text-sm">
+              Skor dari Gemini: <strong>{application.ai_score}</strong>
+            </p>
+            {application.gemini_reason && (
+              <p className="text-sm mt-1">
+                Alasan Detail: <br />
+                {application.gemini_reason}
+              </p>
+            )}
+          </div>
+        )}
+        
         {application.status === 'scheduled' && interviewTime && (
           <div className="mt-6 p-4 bg-yellow-100 rounded-lg border-l-4 border-yellow-500 text-yellow-800">
             <h4 className="font-bold">Detail Jadwal Interview</h4>

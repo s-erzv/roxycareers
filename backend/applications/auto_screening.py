@@ -1,5 +1,6 @@
 # applications/auto_screening.py
 import re
+from .gemini_client import get_gemini_score
 
 def preprocess_answers(job_custom_fields, raw_answers):
     processed_answers = raw_answers.copy()

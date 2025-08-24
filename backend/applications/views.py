@@ -17,6 +17,9 @@ from django.db import transaction
 from .models import Job, Applicant, Question, AssessmentAnswer, AssessmentTemplate
 import uuid # Tambahkan import ini
 
+# Tambahan Import untuk Gemini Client
+from .gemini_client import get_gemini_score
+
 logger = logging.getLogger(__name__)
 
 # Daftar jenis pertanyaan yang membutuhkan review manual
@@ -254,6 +257,7 @@ def apply(request):
             print(f"[APPLY] Memproses lamaran dari '{name}' untuk job ID '{job_id}'.")
             
             try:
+                # Menghapus 'domicile' dari query karena tidak ada di input
                 job_data_response = supabase.from_('jobs').select('custom_fields, title, recruitment_process_type').eq('id', job_id).single().execute()
                 job_data = job_data_response.data
             except PostgrestAPIError as e:
@@ -269,6 +273,7 @@ def apply(request):
             applicant_status = 'Applied'
             ai_score = None
             final_score = None
+            gemini_reason = None # Tambahan
 
             cv_path = None
             for file_path in uploaded_files:
@@ -292,9 +297,23 @@ def apply(request):
                         
                         combined_answers = {**custom_answers, **cv_data}
                         
-                        ai_score_data = get_ai_score(cv_data, job_data)
-                        ai_score = ai_score_data['score']
-                        print(f"[APPLY] Skor AI: {ai_score}")
+                        # --- MODIFIKASI DIMULAI DI SINI ---
+                        ml_score_data = get_ai_score(cv_data, job_data) # Skor awal dari model ML
+                        ml_score = ml_score_data['score'] if ml_score_data else 0
+                        print(f"[APPLY] Skor ML awal: {ml_score}")
+                        
+                        # Tambahan logging untuk Gemini
+                        print("[APPLY] Memulai panggilan Gemini API...")
+                        print(f"[APPLY] Mengirim data: CV_TEXT (panjang={len(cv_text)}), JOB_TITLE='{job_data['title']}', ML_SCORE={ml_score}")
+
+                        ai_score, gemini_reason = get_gemini_score(
+                            cv_text=cv_text,
+                            job_description=job_data['title'],
+                            ml_score=ml_score
+                        )
+                        print("[APPLY] Panggilan Gemini API selesai.")
+                        print(f"[APPLY] Menerima respon: SKOR_AI={ai_score}, ALASAN_GEMINI='{gemini_reason[:50]}...'") # Tampilkan sebagian alasan
+                        # --- MODIFIKASI BERAKHIR DI SINI ---
 
                         if job_data.get('custom_fields') and combined_answers:
                             print("[APPLY] Menjalankan auto-screening...")
@@ -348,7 +367,8 @@ def apply(request):
                 'auto_screening_status': auto_screening_status,
                 'auto_screening_log': screening_result['log'] if screening_result else {},
                 'ai_score': int(round(ai_score)) if ai_score is not None else None,
-                'final_score': int(round(final_score)) if final_score is not None else None
+                'final_score': int(round(final_score)) if final_score is not None else None,
+                'gemini_reason': gemini_reason # Tambahan
             }
             try:
                 print("[APPLY] Menyimpan data pelamar ke Supabase...")
@@ -409,6 +429,8 @@ def rescreen_applicant(request):
             cv_data = {}
             ai_score = None
             final_score = None
+            gemini_reason = None # Tambahan
+
             if cv_path:
                 try:
                     print(f"[RESCREEN] Mengunduh CV untuk rescreening dari: {cv_path}")
@@ -429,15 +451,31 @@ def rescreen_applicant(request):
             
             print("[RESCREEN] Menjalankan auto-screening ulang...")
             print(f"[RESCREEN] Data yang digunakan untuk screening: {combined_answers}")
+            # Menghapus 'domicile' dari query karena tidak ada di input
             job_response = supabase.from_('jobs').select('custom_fields, title, recruitment_process_type').eq('id', applicant_data['job_id']).single().execute()
             job_data = job_response.data
             if not job_data:
                 print(f"[RESCREEN] Gagal: Lowongan dengan ID '{applicant_data['job_id']}' tidak ditemukan.")
                 return JsonResponse({'error': 'Job not found.'}, status=404)
             
-            ai_score_data = get_ai_score(cv_data, job_data)
-            ai_score = ai_score_data['score']
+            # --- MODIFIKASI DIMULAI DI SINI ---
+            ml_score_data = get_ai_score(cv_data, job_data)
+            ml_score = ml_score_data['score'] if ml_score_data else 0
+            print(f"[RESCREEN] Skor ML awal: {ml_score}")
             
+            # Tambahan logging untuk Gemini
+            print("[RESCREEN] Memulai panggilan Gemini API...")
+            print(f"[RESCREEN] Mengirim data: CV_TEXT (panjang={len(cv_text)}), JOB_TITLE='{job_data['title']}', ML_SCORE={ml_score}")
+            
+            ai_score, gemini_reason = get_gemini_score(
+                cv_text=cv_text,
+                job_description=job_data['title'],
+                ml_score=ml_score
+            )
+            print("[RESCREEN] Panggilan Gemini API selesai.")
+            print(f"[RESCREEN] Menerima respon: SKOR_AI={ai_score}, ALASAN_GEMINI='{gemini_reason[:50]}...'") # Tampilkan sebagian alasan
+            # --- MODIFIKASI BERAKHIR DI SINI ---
+
             if job_data.get('custom_fields') and combined_answers:
                 screening_result = run_auto_screening(job_data['custom_fields'], combined_answers, ai_score)
             else:
@@ -459,7 +497,8 @@ def rescreen_applicant(request):
                     'auto_screening_status': new_status,
                     'auto_screening_log': screening_result['log'],
                     'ai_score': int(round(ai_score)) if ai_score is not None else None,
-                    'final_score': int(round(final_score)) if final_score is not None else None
+                    'final_score': int(round(final_score)) if final_score is not None else None,
+                    'gemini_reason': gemini_reason # Tambahan
                 }).eq('id', applicant_id).execute()
                 print("[RESCREEN] Berhasil: Status pelamar berhasil diperbarui.")
 
