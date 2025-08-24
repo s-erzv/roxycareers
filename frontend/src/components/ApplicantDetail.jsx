@@ -1,14 +1,125 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
+import SchedulingForm from './SchedulingForm';
 
-const ApplicantDetail = ({ applicant, onBack, onDownloadFile, onUpdateStatus }) => {
-  const [currentStatus, setCurrentStatus] = useState(applicant.status);
-  
-  const handleChangeStatus = (e) => {
-    const newStatus = e.target.value;
-    setCurrentStatus(newStatus);
-    onUpdateStatus(applicant.id, newStatus);
+const statusFlow = {
+  'Applied': ['Shortlisted', 'Rejected'],
+  'Shortlisted': ['scheduled', 'Rejected'],
+  'Assessment - Completed': ['Lolos Assessment', 'Gagal Assessment'],
+  'Assessment - Needs Review': ['Lolos Assessment', 'Gagal Assessment'],
+  'Lolos Assessment': ['scheduled', 'Rejected'],
+  'Gagal Assessment': ['Rejected'],
+  'scheduled': ['Interviewed', 'Hired', 'Rejected'],
+  'Interviewed': ['Hired', 'Rejected'],
+  'Hired': [],
+  'Rejected': [],
+  'Needs Review': ['Shortlisted', 'Rejected'],
+};
+
+// Fungsi untuk memberikan deskripsi status bagi admin
+const getAdminStatusDescription = (status) => {
+  switch (status) {
+    case 'Applied':
+      return 'Pelamar baru saja mengirimkan lamaran. Perlu dilakukan screening awal.';
+    case 'Shortlisted':
+      return 'Pelamar telah lolos seleksi berkas awal dan siap untuk tahap asesmen atau wawancara.';
+    case 'Rejected':
+      return 'Pelamar tidak lolos pada tahap ini. Lamaran sudah ditolak.';
+    case 'Needs Review':
+      return 'Lamaran pelamar tidak dapat diproses otomatis dan membutuhkan tinjauan manual oleh admin.';
+    case 'Assessment - Completed':
+      return 'Pelamar telah menyelesaikan asesmen. Semua jawaban sudah dinilai secara otomatis.';
+    case 'Assessment - Needs Review':
+      return 'Pelamar telah menyelesaikan asesmen, tetapi ada jawaban (misal: esai atau unggahan file) yang membutuhkan tinjauan manual.';
+    case 'Lolos Assessment':
+      return 'Pelamar berhasil menyelesaikan asesmen dan lolos. Siap untuk dijadwalkan wawancara.';
+    case 'Gagal Assessment':
+      return 'Pelamar tidak lolos pada tahap asesmen.';
+    case 'scheduled':
+      return 'Pelamar sudah dijadwalkan untuk wawancara. Detail jadwal sudah ada.';
+    case 'Interviewed':
+      return 'Wawancara telah selesai. Admin dapat mengubah status menjadi "Hired" atau "Rejected".';
+    case 'Hired':
+      return 'Pelamar telah diterima bekerja. Proses rekrutmen selesai.';
+    default:
+      return 'Status lamaran tidak dapat dikenali.';
+  }
+};
+
+export default function ApplicantDetail({ applicant, onBack, onDownloadFile, onRescreen }) {
+  const [showSchedulingForm, setShowSchedulingForm] = useState(false);
+  const [currentApplicant, setCurrentApplicant] = useState(applicant);
+  const [assessmentDetails, setAssessmentDetails] = useState(null);
+  const [loadingAnswers, setLoadingAnswers] = useState(true);
+
+  // Perbaiki URL fetch dengan menambahkan garis miring di akhir
+  useEffect(() => {
+    const fetchAssessmentAnswers = async () => {
+      try {
+        setLoadingAnswers(true);
+        // Tambahkan garis miring (/) di akhir URL agar sesuai dengan routing Django
+        const response = await fetch(`http://localhost:8000/api/applicants/${currentApplicant.id}/review_assessment/`);
+        if (!response.ok) {
+          throw new Error('Failed to fetch assessment answers');
+        }
+        const data = await response.json();
+        setAssessmentDetails(data);
+      } catch (error) {
+        console.error('Error fetching assessment answers:', error);
+        setAssessmentDetails(null);
+      } finally {
+        setLoadingAnswers(false);
+      }
+    };
+
+    fetchAssessmentAnswers();
+  }, [currentApplicant.id]);
+
+  const handleUpdateStatus = async (newStatus) => {
+    if (newStatus === 'scheduled') {
+      setShowSchedulingForm(true);
+      return;
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from('applicants')
+        .update({ status: newStatus })
+        .eq('id', currentApplicant.id)
+        .select();
+
+      if (error) {
+        throw error;
+      }
+      
+      setCurrentApplicant(data[0]);
+      alert(`Status pelamar berhasil diubah menjadi ${newStatus}.`);
+
+    } catch (error) {
+      alert('Gagal memperbarui status pelamar: ' + error.message);
+    }
   };
+
+  const handleScheduleComplete = () => {
+    setShowSchedulingForm(false);
+  };
+  
+  const handleRescreening = async () => {
+    const { message, new_status, applicant_status } = await onRescreen(currentApplicant.id);
+    setCurrentApplicant(prev => ({ ...prev, status: applicant_status, auto_screening_status: new_status }));
+    alert(message);
+  };
+  
+  const availableStatuses = statusFlow[currentApplicant.status] || [];
+
+  // Tampilkan loading state jika data applicant belum lengkap
+  if (!currentApplicant || !currentApplicant.jobs) {
+    return (
+      <div className="flex justify-center items-center h-screen bg-gray-100">
+        <p>Memuat detail pelamar...</p>
+      </div>
+    );
+  }
 
   return (
     <div className="p-8">
@@ -18,115 +129,151 @@ const ApplicantDetail = ({ applicant, onBack, onDownloadFile, onUpdateStatus }) 
         </svg>
         Kembali ke Daftar Pelamar
       </button>
-      <div className="bg-white rounded-xl shadow-lg p-8 mt-4">
-        <h3 className="text-2xl font-bold text-gray-900 mb-4">Detail Pelamar</h3>
-        <p><strong>Nama:</strong> {applicant.name}</p>
-        <p><strong>Email:</strong> {applicant.email}</p>
-        <p><strong>Melamar untuk:</strong> {applicant.jobs.title}</p>
-        
-        <div className="mt-4">
-          <h4 className="text-lg font-semibold">Status & Screening</h4>
-          <div className="mt-2 flex items-center space-x-2">
-            <span className={`px-3 py-1 rounded-full text-sm font-semibold 
-              ${currentStatus === 'Applied' ? 'bg-blue-100 text-blue-800' :
-              currentStatus === 'Shortlisted' ? 'bg-green-100 text-green-800' :
-              'bg-red-100 text-red-800'}`}
-            >
-              Status: {currentStatus}
-            </span>
-            <select 
-              value={currentStatus} 
-              onChange={handleChangeStatus}
-              className="p-1 rounded-lg border border-gray-300 text-sm"
-            >
-              <option value="Applied">Applied</option>
-              <option value="Shortlisted">Shortlisted</option>
-              <option value="Scheduled for Assessment">Scheduled for Assessment</option>
-              <option value="Interviewed">Interviewed</option>
-              <option value="Hired">Hired</option>
-              <option value="Rejected">Rejected</option>
-            </select>
-          </div>
-          <div className="mt-2">
-            <span className={`px-3 py-1 rounded-full text-sm font-semibold 
-              ${applicant.auto_screening_status === 'Lolos' ? 'bg-green-200 text-green-800' :
-              applicant.auto_screening_status === 'Tidak Lolos' ? 'bg-red-200 text-red-800' :
-              'bg-gray-200 text-gray-800'}`}
-            >
-              Screening: {applicant.auto_screening_status}
-            </span>
-          </div>
 
-          <div className="mt-4 p-4 bg-gray-50 rounded-lg">
-            <h5 className="font-semibold text-gray-800 mb-2">Detail Skor</h5>
-            <p className="text-sm"><strong>Skor AI:</strong> {applicant.ai_score ?? '-'}</p>
-            <p className="text-sm"><strong>Skor Total Final:</strong> {applicant.final_score ?? '-'}</p>
-          </div>
+      {showSchedulingForm && (
+        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full flex justify-center items-center z-50">
+          <SchedulingForm
+            applicant={currentApplicant}
+            onClose={() => setShowSchedulingForm(false)}
+            onScheduleComplete={handleScheduleComplete}
+          />
+        </div>
+      )}
 
-          {applicant.auto_screening_log && (
-            <div className="mt-4 p-4 bg-gray-50 rounded-lg">
-              <h5 className="font-semibold text-gray-800 mb-2">Log Screening Otomatis</h5>
-              {applicant.auto_screening_log['Lolos']?.length > 0 && (
-                <div className="mt-2">
-                  <h6 className="text-sm font-medium text-green-700">✅ Lolos</h6>
-                  <ul className="text-xs text-gray-700 list-disc list-inside mt-1">
-                    {applicant.auto_screening_log['Lolos'].map((log, index) => (
-                      <li key={index}>{log.reason}</li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-              {applicant.auto_screening_log['Tidak Lolos']?.length > 0 && (
-                <div className="mt-2">
-                  <h6 className="text-sm font-medium text-red-700">❌ Tidak Lolos</h6>
-                  <ul className="text-xs text-gray-700 list-disc list-inside mt-1">
-                    {applicant.auto_screening_log['Tidak Lolos'].map((log, index) => (
-                      <li key={index}>{log.reason}</li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-              {applicant.auto_screening_log['Review']?.length > 0 && (
-                <div className="mt-2">
-                  <h6 className="text-sm font-medium text-yellow-700">⚠️ Butuh Review</h6>
-                  <ul className="text-xs text-gray-700 list-disc list-inside mt-1">
-                    {applicant.auto_screening_log['Review'].map((log, index) => (
-                      <li key={index}>{log.reason}</li>
-                    ))}
-                  </ul>
-                </div>
-              )}
+      <div className="bg-white rounded-xl shadow-lg p-6 mt-4">
+        <h3 className="text-2xl font-bold text-gray-900 mb-2">{currentApplicant.name}</h3>
+        <p className="text-sm text-gray-500 mb-4">{currentApplicant.email}</p>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="bg-gray-100 p-4 rounded-lg">
+            <h4 className="font-semibold text-gray-800">Detail Lamaran</h4>
+            {/* Menggunakan optional chaining untuk mencegah error jika `jobs` atau `title` tidak ada */}
+            <p className="text-sm text-gray-600 mt-2"><strong>Posisi:</strong> {currentApplicant.jobs?.title || 'Tidak diketahui'}</p>
+            <div className="mt-2">
+              <p className="text-sm text-gray-600"><strong>Status:</strong> {currentApplicant.status}</p>
+              <p className="text-xs text-gray-500 mt-1">{getAdminStatusDescription(currentApplicant.status)}</p>
             </div>
+            {currentApplicant.auto_screening_status && (
+              <p className="text-sm text-gray-600"><strong>Auto Screening:</strong> {currentApplicant.auto_screening_status}</p>
+            )}
+            {currentApplicant.final_score && (
+              <p className="text-sm text-gray-600"><strong>Skor Final:</strong> {currentApplicant.final_score}</p>
+            )}
+            {currentApplicant.ai_score && (
+              <p className="text-sm text-gray-600"><strong>Skor AI:</strong> {currentApplicant.ai_score}</p>
+            )}
+          </div>
+
+          <div className="bg-gray-100 p-4 rounded-lg">
+            <h4 className="font-semibold text-gray-800">File & Dokumen</h4>
+            {currentApplicant.uploaded_files && currentApplicant.uploaded_files.length > 0 ? (
+              <button
+                onClick={() => onDownloadFile(currentApplicant.uploaded_files[0])}
+                className="mt-2 inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+              >
+                Unduh CV/Dokumen
+              </button>
+            ) : (
+              <p className="text-sm text-gray-600 mt-2">Tidak ada file yang diunggah.</p>
+            )}
+          </div>
+        </div>
+        
+        {currentApplicant.auto_screening_log && (
+          <div className="mt-4 p-4 bg-gray-100 rounded-lg">
+            <h4 className="font-semibold text-gray-800">Log Screening Otomatis</h4>
+            {Object.keys(currentApplicant.auto_screening_log).map(logType => (
+              <div key={logType}>
+                <p className="text-sm font-bold mt-2">{logType}</p>
+                <ul className="list-disc list-inside text-sm text-gray-600">
+                  {currentApplicant.auto_screening_log[logType].map((log, index) => (
+                    <li key={index}>{log.reason}</li>
+                  ))}
+                </ul>
+              </div>
+            ))}
+          </div>
+        )}
+        
+        {/* Tampilkan Jawaban Asesmen */}
+        <div className="mt-6 p-4 bg-white rounded-lg shadow-inner">
+          <h4 className="font-semibold text-gray-800 border-b pb-2 mb-4">Jawaban Asesmen</h4>
+          {loadingAnswers ? (
+            <p className="text-sm text-gray-600">Memuat jawaban asesmen...</p>
+          ) : assessmentDetails && assessmentDetails.answers_to_review.length > 0 ? (
+            <div>
+              <p className="text-sm text-gray-600 mb-2 font-bold">Jawaban Perlu Tinjauan Manual:</p>
+              {assessmentDetails.answers_to_review.map((answer, index) => (
+                <div key={index} className="mb-4 p-4 border rounded-md bg-gray-50">
+                  <p className="font-medium text-gray-700 mb-2">
+                    <span className="font-bold">Pertanyaan:</span> {answer.question_text}
+                  </p>
+                  <p className="text-sm text-gray-600">
+                    <span className="font-bold">Jawaban:</span> {answer.answer}
+                  </p>
+                  <p className="text-sm text-gray-600 mt-2">
+                    <span className="font-bold">Tipe:</span> {answer.type}
+                  </p>
+                </div>
+              ))}
+            </div>
+          ) : assessmentDetails && assessmentDetails.auto_graded_scores.length > 0 ? (
+            <div>
+              <p className="text-sm text-gray-600 mb-2 font-bold">Skor Asesmen Otomatis:</p>
+              {assessmentDetails.auto_graded_scores.map((score, index) => (
+                <div key={index} className="mb-4 p-4 border rounded-md bg-gray-50">
+                  <p className="font-medium text-gray-700 mb-2">
+                    <span className="font-bold">Pertanyaan:</span> {score.question_text}
+                  </p>
+                  <p className="text-sm text-gray-600">
+                    <span className="font-bold">Skor:</span> {score.score}
+                  </p>
+                  <p className="text-sm text-gray-600">
+                    <span className="font-bold">Status:</span> {score.is_correct ? 'Benar' : 'Salah'}
+                  </p>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-sm text-gray-600">Tidak ada jawaban asesmen yang ditemukan.</p>
           )}
         </div>
 
-        <div className="mt-6">
-          <h4 className="text-lg font-semibold">Jawaban Pre-Screening</h4>
-          <ul className="mt-2 list-disc list-inside">
-            {Object.keys(applicant.custom_answers).map((key) => (
-              <li key={key}><strong>{key}:</strong> {applicant.custom_answers[key]}</li>
-            ))}
-          </ul>
-        </div>
-        
-        <div className="mt-6">
-          <h4 className="text-lg font-semibold">Dokumen</h4>
-          <ul className="mt-2 list-disc list-inside">
-            {applicant.uploaded_files && applicant.uploaded_files.map((file, index) => (
-              <li key={index}>
-                <button
-                  onClick={() => onDownloadFile(file)}
-                  className="text-sm text-teal-600 hover:underline"
-                >
-                  {file.split('/').pop()}
-                </button>
-              </li>
-            ))}
-          </ul>
+        {/* Dropdown untuk mengubah status */}
+        <div className="mt-6 flex items-center space-x-4">
+          <label htmlFor="status-dropdown" className="block text-sm font-medium text-gray-700">
+            Ubah Status Pelamar:
+          </label>
+          <div className="relative inline-block text-left">
+            <select
+              id="status-dropdown"
+              onChange={(e) => handleUpdateStatus(e.target.value)}
+              // Menetapkan nilai default yang menunjukkan status saat ini
+              value={currentApplicant.status}
+              className="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md"
+            >
+              {/* Menampilkan status saat ini sebagai opsi pertama dan menonaktifkannya */}
+              <option value={currentApplicant.status} disabled>{currentApplicant.status}</option>
+              {availableStatuses.length > 0 ? (
+                availableStatuses.map(status => (
+                  <option key={status} value={status}>
+                    {status}
+                  </option>
+                ))
+              ) : (
+                <option value="" disabled>Tidak ada status yang tersedia.</option>
+              )}
+            </select>
+          </div>
+
+          <button
+            onClick={handleRescreening}
+            className="text-sm text-yellow-500 hover:text-yellow-700 font-semibold"
+          >
+            Rescreen
+          </button>
         </div>
       </div>
     </div>
   );
-};
-
-export default ApplicantDetail;
+}

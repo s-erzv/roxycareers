@@ -8,7 +8,8 @@ import AdminDashboard from './pages/AdminDashboard';
 import CandidateDashboard from './pages/CandidateDashboard';
 import JobFormPage from './pages/JobFormPage';
 import InterviewSchedulePage from './pages/InterviewSchedulePage';
-import AssessmentPage from './pages/AssessmentPage'; // Import AssessmentPage
+import AssessmentPage from './pages/AssessmentPage'; 
+import ApplicantsList from './components/ApplicantList'; 
 
 const Header = () => {
   const { userProfile, signOut } = useAuth();
@@ -33,7 +34,6 @@ const Header = () => {
               <a href="/admin" className="text-sm font-semibold text-white">
                 Dashboard
               </a>
-              {/* Tombol Jadwal Interview dihapus di sini */}
               <a href="/admin/jobForm" className="text-sm font-semibold text-white">
                 Tambah Lowongan
               </a>
@@ -91,6 +91,7 @@ const AppRoutes = () => {
           <Route path="/admin/jobForm" element={<JobFormPage />} />
           <Route path="/admin" element={<AdminDashboard />} />
           <Route path="/admin/schedules" element={<InterviewSchedulePage />} />
+          <Route path="/admin/applicants/:jobId" element={<ApplicantsList />} /> 
           <Route path="*" element={<Navigate to="/admin" />} />
         </Routes>
       );

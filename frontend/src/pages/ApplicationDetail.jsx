@@ -52,6 +52,13 @@ const getStatusMessage = (status) => {
         color: 'bg-gray-400 text-white',
         actionMessage: ''
       };
+    case 'Assessment - Needs Review':
+      return {
+        title: 'Asesmen Selesai, Menunggu Tinjauan Manual',
+        message: 'Anda telah menyelesaikan asesmen. Karena ada pertanyaan yang membutuhkan tinjauan manual, hasilnya akan diulas oleh tim rekrutmen kami.',
+        color: 'bg-orange-400 text-white',
+        actionMessage: ''
+      };
     case 'Lolos Assessment':
       return {
         title: 'Selamat, Anda Lolos Asesmen!',
@@ -64,6 +71,13 @@ const getStatusMessage = (status) => {
         title: 'Mohon Maaf, Anda Gagal Asesmen',
         message: 'Kami mohon maaf, Anda belum berhasil lolos pada tahap asesmen kali ini. Terima kasih atas partisipasi Anda.',
         color: 'bg-red-500 text-white',
+        actionMessage: ''
+      };
+    case 'Needs Review':
+      return {
+        title: 'Menunggu Tinjauan',
+        message: 'Lamaran Anda sedang dalam tinjauan manual oleh tim rekrutmen kami. Silakan tunggu informasi selanjutnya.',
+        color: 'bg-purple-100 text-purple-800',
         actionMessage: ''
       };
     default:
