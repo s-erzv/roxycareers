@@ -24,8 +24,6 @@ google-auth
 google-auth-httplib2
 google-generativeai
 googleapis-common-protos
-grpcio
-grpcio-status
 h11
 h2
 hpack
@@ -48,7 +46,6 @@ nltk
 numpy
 packaging
 pandas
-pdfminer.six
 pdfplumber
 pillow
 postgrest
@@ -104,3 +101,9 @@ wasabi
 weasel
 websockets
 wrapt
+grpcio==1.71.0
+grpcio-status==1.71.0
+pdfminer.six==20240706
+gunicorn
+whitenoise
+
