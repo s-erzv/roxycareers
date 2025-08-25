@@ -1,13 +1,16 @@
 import React from 'react';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
  
 import Auth from './pages/Auth';
 import Home from './pages/Home';
 import AdminDashboard from './pages/AdminDashboard';
 import CandidateDashboard from './pages/CandidateDashboard';
 import JobFormPage from './pages/JobFormPage';
- 
+import InterviewSchedulePage from './pages/InterviewSchedulePage';
+import AssessmentPage from './pages/AssessmentPage'; 
+import ApplicantsList from './components/ApplicantList'; 
+
 const Header = () => {
   const { userProfile, signOut } = useAuth();
   
@@ -23,6 +26,16 @@ const Header = () => {
               </a>
               <a href="/dashboard" className="text-sm font-semibold text-white">
                 Dashboard
+              </a>
+            </div>
+          )}
+          {(userProfile?.role === 'admin' || userProfile?.role === 'admin_hc') && (
+            <div className="flex space-x-4">
+              <a href="/admin" className="text-sm font-semibold text-white">
+                Dashboard
+              </a>
+              <a href="/admin/jobForm" className="text-sm font-semibold text-white">
+                Tambah Lowongan
               </a>
             </div>
           )}
@@ -44,7 +57,8 @@ const Header = () => {
  
 const AppRoutes = () => {
   const { session, userProfile, loading } = useAuth();
-  
+  const location = useLocation();
+
   if (loading) {
     return (
       <div className="flex justify-center items-center h-screen bg-gray-100">
@@ -64,15 +78,20 @@ const AppRoutes = () => {
           <Route path="/" element={<Home />} />
           <Route path="/home" element={<Home />} />
           <Route path="/dashboard" element={<CandidateDashboard />} />
+          <Route 
+            path="/assessment" 
+            element={location.state?.applicant ? <AssessmentPage applicant={location.state.applicant} onBack={() => window.history.back()} /> : <Navigate to="/dashboard" />} 
+          />
           <Route path="*" element={<Navigate to="/home" />} />
         </Routes>
       );
-    } else { // Jika role bukan 'candidate', asumsikan itu admin/admin_hc
+    } else {
       return (
         <Routes>
-          {/* Perbaikan: Urutan rute penting. Rute spesifik harus di atas. */}
           <Route path="/admin/jobForm" element={<JobFormPage />} />
           <Route path="/admin" element={<AdminDashboard />} />
+          <Route path="/admin/schedules" element={<InterviewSchedulePage />} />
+          <Route path="/admin/applicants/:jobId" element={<ApplicantsList />} /> 
           <Route path="*" element={<Navigate to="/admin" />} />
         </Routes>
       );

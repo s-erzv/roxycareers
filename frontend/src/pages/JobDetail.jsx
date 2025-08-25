@@ -109,6 +109,54 @@ const JobDetail = ({ job, onBack }) => {
       }
     };
 
+    const renderCustomField = (field, index) => {
+      const fieldId = `custom-${field.label}-${index}`;
+      
+      switch (field.type) {
+        case 'number':
+        case 'text':
+          return (
+            <input
+              type={field.type}
+              id={fieldId}
+              value={customAnswers[field.label] || ''}
+              onChange={(e) => handleCustomAnswerChange(field.label, e.target.value)}
+              className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+              required={field.required}
+            />
+          );
+        case 'boolean':
+          return (
+            <input
+              type="checkbox"
+              id={fieldId}
+              checked={customAnswers[field.label] === true}
+              onChange={(e) => handleCustomAnswerChange(field.label, e.target.checked)}
+              className="mr-2 h-4 w-4 text-teal-600 rounded"
+              required={field.required}
+            />
+          );
+        case 'dropdown':
+          const options = field.options?.split(',').map(s => s.trim());
+          return (
+            <select
+              id={fieldId}
+              value={customAnswers[field.label] || ''}
+              onChange={(e) => handleCustomAnswerChange(field.label, e.target.value)}
+              className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+              required={field.required}
+            >
+              <option value="">Pilih...</option>
+              {options?.map(option => (
+                <option key={option} value={option}>{option}</option>
+              ))}
+            </select>
+          );
+        default:
+          return null;
+      }
+    };
+
     return (
       <form onSubmit={handleSubmit} className="space-y-4">
         <div>
@@ -125,14 +173,10 @@ const JobDetail = ({ job, onBack }) => {
             <h4 className="font-semibold text-gray-700">Pertanyaan Pre-Screening</h4>
             {job.custom_fields.map((field, index) => (
               <div key={index}>
-                <label className="block text-gray-700 text-sm font-bold mb-2">{field.label}</label>
-                <input
-                  type={field.type}
-                  value={customAnswers[field.label] || ''}
-                  onChange={(e) => handleCustomAnswerChange(field.label, e.target.value)}
-                  className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
-                  required={field.required}
-                />
+                <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor={`custom-${field.label}-${index}`}>
+                  {field.label} {field.required && <span className="text-red-500">*</span>}
+                </label>
+                {renderCustomField(field, index)}
               </div>
             ))}
           </div>

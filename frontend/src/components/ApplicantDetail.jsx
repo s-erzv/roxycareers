@@ -1,95 +1,113 @@
 import React, { useState } from 'react';
 import { supabase } from '../supabaseClient';
 
-const ApplicantDetail = ({ applicant, onBack, onDownloadFile, onUpdateStatus }) => {
-  const [currentStatus, setCurrentStatus] = useState(applicant.status);
-  
-  const handleChangeStatus = (e) => {
-    const newStatus = e.target.value;
-    setCurrentStatus(newStatus);
-    onUpdateStatus(applicant.id, newStatus);
-  };
+const getStatusMessage = (status) => {
+    switch (status) {
+        case 'Applied': return { color: 'blue', text: 'Menunggu Screening Otomatis' };
+        case 'Shortlisted': return { color: 'green', text: 'Lolos Screening' };
+        case 'Rejected': return { color: 'red', text: 'Tidak Lolos Screening' };
+        case 'Needs Review': return { color: 'purple', text: 'Membutuhkan Tinjauan Manual' };
+        case 'scheduled': return { color: 'yellow', text: 'Menunggu Interview' };
+        case 'Lolos Assessment': return { color: 'green', text: 'Lolos Assessment' };
+        case 'Gagal Assessment': return { color: 'red', text: 'Gagal Assessment' };
+        case 'Assessment - Completed': return { color: 'gray', text: 'Assessment Selesai' };
+        default: return { color: 'gray', text: status };
+    }
+};
 
-  return (
-    <div className="p-8">
-      <button onClick={onBack} className="flex items-center text-gray-600 hover:text-gray-900 transition-colors duration-200">
-        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-        </svg>
-        Kembali ke Daftar Pelamar
-      </button>
-      <div className="bg-white rounded-xl shadow-lg p-8 mt-4">
-        <h3 className="text-2xl font-bold text-gray-900 mb-4">Detail Pelamar</h3>
-        <p><strong>Nama:</strong> {applicant.name}</p>
-        <p><strong>Email:</strong> {applicant.email}</p>
-        <p><strong>Melamar untuk:</strong> {applicant.jobs.title}</p>
-        
-        <div className="mt-4">
-          <h4 className="text-lg font-semibold">Status & Screening</h4>
-          <div className="mt-2 flex items-center space-x-2">
-            <span className={`px-3 py-1 rounded-full text-sm font-semibold 
-              ${currentStatus === 'Applied' ? 'bg-blue-100 text-blue-800' :
-              currentStatus === 'Shortlisted' ? 'bg-green-100 text-green-800' :
-              'bg-red-100 text-red-800'}`}
-            >
-              Status: {currentStatus}
-            </span>
-            <select 
-              value={currentStatus} 
-              onChange={handleChangeStatus}
-              className="p-1 rounded-lg border border-gray-300 text-sm"
-            >
-              <option value="Applied">Applied</option>
-              <option value="Shortlisted">Shortlisted</option>
-              <option value="Scheduled for Assessment">Scheduled for Assessment</option>
-              <option value="Interviewed">Interviewed</option>
-              <option value="Hired">Hired</option>
-              <option value="Rejected">Rejected</option>
-            </select>
-          </div>
-          <div className="mt-2">
-            <span className={`px-3 py-1 rounded-full text-sm font-semibold 
-              ${applicant.auto_screening_status === 'Lolos' ? 'bg-green-200 text-green-800' :
-              applicant.auto_screening_status === 'Tidak Lolos' ? 'bg-red-200 text-red-800' :
-              'bg-gray-200 text-gray-800'}`}
-            >
-              Screening: {applicant.auto_screening_status}
-            </span>
-          </div>
-          {applicant.auto_screening_log && applicant.auto_screening_log['Tidak Lolos']?.length > 0 && (
-            <div className="mt-2 text-xs text-red-500">
-              <strong>Catatan:</strong> {applicant.auto_screening_log['Tidak Lolos'].map(log => log.reason).join(' | ')}
+const ApplicantDetail = ({ applicant, job, onClose }) => {
+    const [isRescreening, setIsRescreening] = useState(false);
+    const [rescreeningMessage, setRescreeningMessage] = useState('');
+
+    const handleRescreen = async () => {
+        setIsRescreening(true);
+        setRescreeningMessage('Memulai rescreening... ini mungkin butuh waktu.');
+        try {
+            const response = await fetch('/api/rescreen_applicant/', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ applicant_id: applicant.id }),
+            });
+            const data = await response.json();
+            if (response.ok) {
+                setRescreeningMessage(`Rescreening selesai! Status baru: ${data.applicant_status}`);
+                // Anda mungkin perlu memuat ulang data pelamar dari parent component jika diperlukan
+            } else {
+                setRescreeningMessage(`Gagal rescreening: ${data.error}`);
+            }
+        } catch (error) {
+            setRescreeningMessage(`Terjadi kesalahan jaringan: ${error.message}`);
+        } finally {
+            setIsRescreening(false);
+        }
+    };
+
+    const applicantStatus = getStatusMessage(applicant.status);
+    const autoScreeningStatus = getStatusMessage(applicant.auto_screening_status);
+
+    return (
+        <div className="p-4 bg-gray-50 border border-gray-200 rounded-lg">
+            <div className="flex justify-between items-center">
+                <h3 className="text-xl font-bold text-gray-800">{applicant.name}</h3>
+                <button onClick={onClose} className="text-gray-500 hover:text-gray-800">&times;</button>
             </div>
-          )}
-        </div>
+            <p className="text-sm text-gray-500">{applicant.email}</p>
+            
+            {/* Perbaikan: Tambahkan pengecekan kondisional untuk objek 'job' */}
+            {job && (
+                <p className="text-sm text-gray-500 mt-1">Melamar di: {job.title} ({job.company})</p>
+            )}
 
-        <div className="mt-6">
-          <h4 className="text-lg font-semibold">Jawaban Pre-Screening</h4>
-          <ul className="mt-2 list-disc list-inside">
-            {Object.keys(applicant.custom_answers).map((key) => (
-              <li key={key}><strong>{key}:</strong> {applicant.custom_answers[key]}</li>
-            ))}
-          </ul>
-        </div>
-        
-        <div className="mt-6">
-          <h4 className="text-lg font-semibold">Dokumen</h4>
-          <ul className="mt-2 list-disc list-inside">
-            {applicant.uploaded_files && applicant.uploaded_files.map((file, index) => (
-              <li key={index}>
-                <button
-                  onClick={() => onDownloadFile(file.split(': ')[1])}
-                  className="text-sm text-teal-600 hover:underline"
-                >
-                  {file.split(': ')[0]} ({file.split('/').pop()})
+            <div className="flex items-center mt-2">
+                <span className={`px-2 py-1 text-xs font-semibold rounded-full text-white bg-${applicantStatus.color}-500`}>{applicantStatus.text}</span>
+            </div>
+            
+            {/* Bagian Auto-Screening */}
+            <div className="mt-4 p-4 bg-gray-100 rounded-lg">
+                <h4 className="font-semibold text-gray-700">Hasil Screening Otomatis</h4>
+                <div className="flex items-center mt-2">
+                    <span className={`px-2 py-1 text-xs font-semibold rounded-full text-white bg-${autoScreeningStatus.color}-500`}>{autoScreeningStatus.text}</span>
+                    {applicant.final_score !== null && (
+                        <span className="ml-2 text-sm text-gray-600">Skor Total: {applicant.final_score}</span>
+                    )}
+                </div>
+                {/* Log screening */}
+                {applicant.auto_screening_log && (
+                    <div className="mt-2 text-xs text-gray-500">
+                        <ul className="list-disc list-inside">
+                            {applicant.auto_screening_log.Lolos.map((item, index) => <li key={`pass-${index}`} className="text-green-600">{item.reason}</li>)}
+                            {applicant.auto_screening_log['Tidak Lolos'].map((item, index) => <li key={`fail-${index}`} className="text-red-600">{item.reason}</li>)}
+                            {applicant.auto_screening_log.Review.map((item, index) => <li key={`review-${index}`} className="text-yellow-600">{item.reason}</li>)}
+                        </ul>
+                    </div>
+                )}
+            </div>
+            
+            {/* === Tambahan: Bagian untuk Gemini === */}
+            {applicant.ai_score !== null && applicant.gemini_reason && (
+                <div className="mt-4 p-4 bg-purple-100 rounded-lg border-l-4 border-purple-500 text-purple-800">
+                    <h4 className="font-bold">Analisis AI Mendalam dari Gemini</h4>
+                    <p className="mt-2 text-sm">
+                        Skor AI: <strong>{applicant.ai_score}</strong>
+                    </p>
+                    <p className="text-sm mt-1">
+                        Alasan Detail: <br />
+                        {applicant.gemini_reason}
+                    </p>
+                </div>
+            )}
+            
+            <div className="mt-4">
+                {applicant.uploaded_files && applicant.uploaded_files[0] && (
+                    <a href={applicant.uploaded_files[0]} target="_blank" rel="noopener noreferrer" className="text-indigo-600 hover:underline">Lihat CV</a>
+                )}
+                <button onClick={handleRescreen} className="ml-4 text-sm text-blue-600 hover:underline" disabled={isRescreening}>
+                    {isRescreening ? 'Rescreening...' : 'Rescreening Otomatis Ulang'}
                 </button>
-              </li>
-            ))}
-          </ul>
+                {rescreeningMessage && <p className="mt-2 text-sm text-gray-500">{rescreeningMessage}</p>}
+            </div>
         </div>
-      </div>
-    </div>
-  );
+    );
 };
 
 export default ApplicantDetail;

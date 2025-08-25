@@ -1,0 +1,181 @@
+{
+    "technical_skills": [
+        "python", "java", "javascript", "typescript", "c++", "c#", "php", "ruby", "go", "swift", "kotlin", "r",
+        "html", "css", "react", "angular", "vue.js", "node.js", "django", "flask", "spring boot", "laravel",
+        "mysql", "postgresql", "mongodb", "oracle", "sql server", "redis", "elasticsearch",
+        "aws", "azure", "gcp", "google cloud", "docker", "kubernetes", "jenkins", "git", "github",
+        "linux", "windows server", "networking", "cybersecurity", "ethical hacking", "penetration testing",
+        "machine learning", "deep learning", "data science", "big data", "artificial intelligence",
+        "mobile development", "android", "ios", "react native", "flutter",
+        
+        "photoshop", "illustrator", "indesign", "figma", "sketch", "adobe xd", "canva", "coreldraw",
+        "after effects", "premiere pro", "final cut pro", "blender", "maya", "3ds max", "autocad",
+        "solidworks", "sketchup", "rhino", "cinema 4d", "lightroom", "davinci resolve",
+        "ui/ux design", "graphic design", "web design", "motion graphics", "3d modeling", "animation",
+        "video editing", "photo editing", "digital illustration", "brand design", "packaging design",
+        
+        "autocad", "solidworks", "catia", "inventor", "fusion 360", "creo", "nx", "ansys", "matlab",
+        "simulink", "labview", "plc programming", "scada", "hmi", "industrial automation",
+        "lean manufacturing", "six sigma", "iso 9001", "iso 14001", "ohsas 18001", "5s", "kaizen",
+        "cad", "cam", "cnc programming", "quality control", "quality assurance", "statistical process control",
+        "project management", "procurement", "supply chain management", "logistics", "inventory management",
+        
+        "excel", "quickbooks", "sap", "oracle financials", "myob", "accurate", "zahir", "sage",
+        "financial analysis", "budgeting", "forecasting", "financial modeling", "valuation",
+        "tax preparation", "auditing", "cost accounting", "management accounting", "ifrs", "gaap",
+        "bloomberg terminal", "reuters", "capital iq", "factset", "morningstar", "wind",
+        
+        "google analytics", "google ads", "facebook ads", "instagram ads", "linkedin ads", "tiktok ads",
+        "seo", "sem", "social media marketing", "content marketing", "email marketing", "crm",
+        "salesforce", "hubspot", "mailchimp", "hootsuite", "buffer", "sprout social",
+        "adobe creative suite", "canva", "wordpress", "shopify", "woocommerce", "magento",
+        "market research", "consumer behavior", "brand management", "digital marketing",
+        
+        "medical terminology", "anatomy", "physiology", "pharmacology", "pathology", "radiology",
+        "electronic health records", "ehr", "emr", "his", "pacs", "ris", "lis",
+        "medical coding", "icd-10", "cpt", "medical billing", "healthcare administration",
+        "clinical research", "gcp", "clinical trials", "fda regulations", "ich guidelines",
+        "telemedicine", "medical devices", "healthcare quality", "patient safety",
+        
+        "legal research", "contract drafting", "litigation", "corporate law", "intellectual property",
+        "compliance", "regulatory affairs", "due diligence", "mergers & acquisitions",
+        "legal writing", "case management", "legal databases", "westlaw", "lexisnexis",
+        
+        "recruitment", "talent acquisition", "onboarding", "performance management", "compensation",
+        "benefits administration", "hris", "payroll", "labor relations", "employment law",
+        "training and development", "organizational development", "change management",
+        "applicant tracking system", "ats", "workday", "successfactors", "bamboohr",
+        
+        "supply chain management", "logistics", "procurement", "inventory management", "warehouse management",
+        "transportation", "distribution", "vendor management", "contract negotiation",
+        "erp", "sap", "oracle", "wms", "tms", "lean operations", "process improvement",
+        
+        "curriculum development", "instructional design", "e-learning", "lms", "moodle", "blackboard",
+        "classroom management", "assessment", "educational technology", "pedagogy", "andragogy",
+        "training delivery", "facilitation", "adult learning", "microlearning",
+        
+        "english", "mandarin", "japanese", "korean", "spanish", "french", "german", "arabic",
+        "bahasa indonesia", "bahasa malaysia", "thai", "vietnamese", "hindi", "portuguese", "russian",
+        
+        "microsoft office", "google workspace", "project management", "agile", "scrum", "kanban",
+        "business analysis", "process improvement", "change management", "risk management",
+        "customer service", "technical support", "troubleshooting", "documentation", "training"
+    ],
+    "soft_skills": [
+        "leadership", "team management", "project management", "communication",
+        "problem solving", "analytical thinking", "critical thinking", "creativity",
+        "adaptability", "time management", "organizational skills", "attention to detail",
+        "collaboration", "teamwork", "mentoring", "coaching", "presentation skills",
+        "negotiation", "conflict resolution", "decision making", "strategic thinking",
+        "customer service", "client relationship", "stakeholder management",
+        "agile mindset", "continuous learning", "innovation", "research skills"
+    ],
+    "methodologies": [
+        "agile", "scrum", "kanban", "lean", "waterfall", "devops", "ci/cd",
+        "tdd", "bdd", "ddd", "microservices", "monolithic", "serverless",
+        "rest api", "graphql", "soap", "grpc", "event driven architecture",
+        "clean architecture", "design patterns", "solid principles",
+        "twelve factor app"
+    ],
+    "tools": [
+        "jira", "confluence", "trello", "asana", "monday.com", "notion",
+        "slack", "microsoft teams", "zoom", "figma", "sketch", "adobe xd",
+        "photoshop", "illustrator", "canva", "visual studio", "vs code",
+        "intellij", "eclipse", "sublime text", "atom", "vim", "emacs",
+        "postman", "insomnia", "fiddler", "charles proxy"
+    ],
+    "certifications": [
+        "aws certified", "azure certified", "gcp certified", "oracle certified",
+        "microsoft certified", "cisco certified", "comptia", "cissp", "cism",
+        "cisa", "ceh", "oscp", "sans", "pmp", "prince2", "itil", "cobit",
+        "scrum master", "product owner", "safe", "six sigma", "iso 27001"
+    ],
+    "industries": [
+        "fintech", "e-commerce", "healthcare", "education", "government",
+        "banking", "insurance", "retail", "manufacturing", "automotive",
+        "telecommunications", "media", "entertainment", "gaming", "logistics",
+        "supply chain", "real estate", "energy", "utilities", "agriculture",
+        "non-profit", "consulting", "startup", "enterprise"
+    ],
+    "education_keywords": {
+        "s.kom": "S.Kom", "sarjana komputer": "S.Kom", "bachelor of computer science": "S.Kom",
+        "s.si": "S.Si", "sarjana sains": "S.Si", "bachelor of science": "S.Si",
+        "s.t": "S.T", "sarjana teknik": "S.T", "bachelor of engineering": "S.T",
+        "s.e": "S.E", "sarjana ekonomi": "S.E", "bachelor of economics": "S.E",
+        "s.m": "S.M", "sarjana manajemen": "S.M", "bachelor of management": "S.M",
+        "s.ak": "S.Ak", "sarjana akuntansi": "S.Ak", "bachelor of accounting": "S.Ak",
+        "s.h": "S.H", "sarjana hukum": "S.H", "bachelor of law": "S.H",
+        "s.psi": "S.Psi", "sarjana psikologi": "S.Psi", "bachelor of psychology": "S.Psi",
+        "s.pd": "S.Pd", "sarjana pendidikan": "S.Pd", "bachelor of education": "S.Pd",
+        "s.sos": "S.Sos", "sarjana sosial": "S.Sos", "bachelor of social science": "S.Sos",
+        "s.ip": "S.IP", "sarjana ilmu politik": "S.IP", "bachelor of political science": "S.IP",
+        "s.farm": "S.Farm", "sarjana farmasi": "S.Farm", "bachelor of pharmacy": "S.Farm",
+        "s.kep": "S.Kep", "sarjana keperawatan": "S.Kep", "bachelor of nursing": "S.Kep",
+        "s.ked": "S.Ked", "sarjana kedokteran": "S.Ked", "bachelor of medicine": "S.Ked",
+        "bachelor": "Bachelor", "sarjana": "Bachelor", "s1": "Bachelor",
+        "b.sc": "B.Sc", "b.s": "B.S", "b.a": "B.A", "b.eng": "B.Eng", 
+        "b.tech": "B.Tech", "b.com": "B.Com", "b.ba": "B.BA", "b.ed": "B.Ed",
+        
+        "m.kom": "M.Kom", "magister komputer": "M.Kom", "master of computer science": "M.Kom",
+        "m.si": "M.Si", "magister sains": "M.Si", "master of science": "M.Si",
+        "m.t": "M.T", "magister teknik": "M.T", "master of engineering": "M.T",
+        "m.m": "M.M", "magister manajemen": "M.M", "master of management": "M.M",
+        "m.ak": "M.Ak", "magister akuntansi": "M.Ak", "master of accounting": "M.Ak",
+        "m.h": "M.H", "magister hukum": "M.H", "master of law": "M.H",
+        "m.psi": "M.Psi", "magister psikologi": "M.Psi", "master of psychology": "M.Psi",
+        "m.pd": "M.Pd", "magister pendidikan": "M.Pd", "master of education": "M.Pd",
+        "m.e": "M.E", "magister ekonomi": "M.E", "master of economics": "M.E",
+        "mba": "MBA", "master of business administration": "MBA",
+        "mca": "MCA", "master of computer applications": "MCA",
+        "mit": "MIT", "master in information technology": "MIT",
+        "mim": "MIM", "master in management": "MIM",
+        "magister": "Master", "s2": "Master", "master": "Master",
+        "m.sc": "M.Sc", "m.s": "M.S", "m.a": "M.A", "m.eng": "M.Eng",
+        "m.tech": "M.Tech", "m.phil": "M.Phil",
+        
+        "dr": "Dr", "doktor": "Dr", "doctoral": "Dr", "s3": "Dr",
+        "phd": "PhD", "ph.d": "PhD", "doctor of philosophy": "PhD",
+        "dba": "DBA", "doctor of business administration": "DBA",
+        "edd": "EdD", "doctor of education": "EdD",
+        "dsc": "DSc", "doctor of science": "DSc",
+        "md": "MD", "doctor of medicine": "MD",
+        
+        "diploma": "Diploma", "d3": "Diploma", "d4": "Advanced Diploma",
+        "associate degree": "Associate", "certificate": "Certificate",
+        "professional certificate": "Professional Certificate",
+        "sertifikat": "Certificate", "sertifikat profesi": "Professional Certificate",
+        
+        "teknik informatika": "Computer Engineering", "ilmu komputer": "Computer Science",
+        "sistem informasi": "Information Systems", "teknologi informasi": "Information Technology",
+        "teknik komputer": "Computer Engineering", "rekayasa perangkat lunak": "Software Engineering",
+        "keamanan siber": "Cybersecurity", "sains data": "Data Science",
+        "kecerdasan buatan": "Artificial Intelligence", "pembelajaran mesin": "Machine Learning",
+        "manajemen bisnis": "Business Management", "administrasi bisnis": "Business Administration",
+        "teknik elektro": "Electrical Engineering", "teknik mesin": "Mechanical Engineering",
+        "teknik sipil": "Civil Engineering", "teknik industri": "Industrial Engineering",
+        "matematika": "Mathematics", "statistika": "Statistics", "fisika": "Physics",
+        "kimia": "Chemistry", "biologi": "Biology", "ekonomi": "Economics",
+        "akuntansi": "Accounting", "keuangan": "Finance", "pemasaran": "Marketing",
+        "manajemen": "Management", "hukum": "Law", "psikologi": "Psychology",
+        "komunikasi": "Communication", "desain grafis": "Graphic Design",
+        "desain produk": "Product Design", "arsitektur": "Architecture"
+    },
+    "job_levels": [
+        "intern", "internship", "magang", "fresh graduate", "entry level",
+        "junior", "associate", "mid level", "intermediate", "senior",
+        "lead", "principal", "staff", "manager", "senior manager",
+        "team lead", "tech lead", "architect", "director", "vp",
+        "vice president", "c-level", "cto", "cio", "cpo", "ceo",
+        "head of", "chief", "executive", "co-founder", "founder"
+    ],
+    "experience_years": [
+        "0-1 years", "1-2 years", "2-3 years", "3-5 years", "5-7 years",
+        "7-10 years", "10+ years", "15+ years", "fresh graduate",
+        "entry level", "experienced", "expert", "specialist"
+    ],
+    "employment_types": [
+        "full time", "part time", "contract", "freelance", "internship",
+        "remote", "hybrid", "on-site", "work from home", "wfh",
+        "consultant", "temporary", "permanent", "project-based"
+    ]
+}

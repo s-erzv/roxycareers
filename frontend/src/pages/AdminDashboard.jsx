@@ -1,113 +1,57 @@
-// AdminDashboard.jsx
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
 import { useAuth } from '../contexts/AuthContext';
-import ApplicantDetail from '../components/ApplicantDetail';
-import SchedulingForm from '../components/SchedulingForm';
 import { useNavigate } from 'react-router-dom';
-import JobFormPage from './JobFormPage';
+import QuestionBankPage from './QuestionBankPage';
+import ManualAssessmentReviewPage from './ManualAssessmentReviewPage';
 
-// Fungsi untuk memanggil rescreening dari backend
-const handleRescreening = async (applicantId) => {
-  try {
-    const response = await fetch('http://localhost:3000/rescreen-applicant', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ applicant_id: applicantId }),
-    });
-
-    if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.error);
-    }
-    
-    alert('Rescreening berhasil! Status pelamar akan diperbarui.');
-  } catch (error) {
-    alert('Gagal melakukan rescreening: ' + error.message);
-  }
-};
-
-// Komponen untuk menampilkan daftar pelamar
-const ApplicantsList = ({ job, applicants, onBack, onDownloadFile, onUpdateStatus, onSelectApplicant }) => (
-  <div className="p-8">
-    <button onClick={onBack} className="flex items-center text-gray-600 hover:text-gray-900 transition-colors duration-200">
-      <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-      </svg>
-      Kembali ke Daftar Lowongan
-    </button>
-    <div className="bg-white rounded-xl shadow-lg p-6 mt-4">
-      <h3 className="text-2xl font-bold text-gray-900 mb-4">Pelamar untuk: {job.title}</h3>
-      {applicants.length > 0 ? (
-        <ul className="space-y-4">
-          {applicants.map(applicant => (
-            <li key={applicant.id} className="bg-gray-100 p-4 rounded-lg shadow-sm">
-              <div className="flex justify-between items-start">
-                <div>
-                  <div className="font-semibold text-gray-800">{applicant.name}</div>
-                  <div className="text-sm text-gray-500">{applicant.email}</div>
-                  <div className="mt-2 flex items-center space-x-2">
-                    <span className={`px-3 py-1 rounded-full text-sm font-semibold 
-                      ${applicant.status === 'Applied' ? 'bg-blue-100 text-blue-800' :
-                      applicant.status === 'Shortlisted' ? 'bg-green-100 text-green-800' :
-                      applicant.status === 'Scheduled for Interview' ? 'bg-yellow-100 text-yellow-800' :
-                      applicant.status === 'Interviewed' ? 'bg-indigo-100 text-indigo-800' :
-                      'bg-red-100 text-red-800'}`}
-                    >
-                      Status: {applicant.status}
-                    </span>
-                    <span className={`px-3 py-1 rounded-full text-sm font-semibold 
-                      ${applicant.auto_screening_status === 'Lolos' ? 'bg-green-200 text-green-800' :
-                      applicant.auto_screening_status === 'Tidak Lolos' ? 'bg-red-200 text-red-800' :
-                      'bg-gray-200 text-gray-800'}`}
-                    >
-                      Screening: {applicant.auto_screening_status}
-                    </span>
-                  </div>
-                  {applicant.auto_screening_log && applicant.auto_screening_log['Tidak Lolos']?.length > 0 && (
-                    <div className="mt-2 text-xs text-red-500">
-                      <strong>Catatan:</strong> {applicant.auto_screening_log['Tidak Lolos'].map(log => log.reason).join(' | ')}
-                    </div>
-                  )}
-                </div>
-                <div className="flex items-center space-x-2">
-                  <button
-                    onClick={() => onSelectApplicant(applicant)}
-                    className="text-sm text-blue-500 hover:text-blue-700 font-semibold"
-                  >
-                    Lihat Detail
-                  </button>
-                  <button
-                    onClick={() => handleRescreening(applicant.id)}
-                    className="text-sm text-yellow-500 hover:text-yellow-700 font-semibold"
-                  >
-                    Rescreen
-                  </button>
-                </div>
-              </div>
-            </li>
-          ))}
-        </ul>
-      ) : (
-        <p className="text-center text-gray-500">Belum ada pelamar untuk lowongan ini.</p>
-      )}
+const JobItem = ({ job, onOpenJobForm, onViewApplicants, onDeleteJob }) => (
+    <div
+        className="bg-white rounded-xl shadow-lg p-6 transition-shadow duration-300 border border-gray-200"
+    >
+        <div className="cursor-pointer">
+            <h4 className="text-xl font-semibold text-gray-800">{job.title}</h4>
+            <p className="text-sm text-gray-500 mt-1">{job.company} | {job.location}</p>
+        </div>
+        <div className="mt-4 flex space-x-2">
+            <button
+                // Perbaikan di sini: gunakan job.id
+                onClick={() => onViewApplicants(job.id, job.title)}
+                className="text-sm text-blue-500 hover:text-blue-700 font-semibold"
+            >
+                Lihat Pelamar
+            </button>
+            <button
+                onClick={() => onOpenJobForm(job)}
+                className="text-sm text-blue-500 hover:text-blue-700 font-semibold"
+            >
+                Edit
+            </button>
+            <button
+                onClick={() => onDeleteJob(job.id)}
+                className="text-sm text-red-500 hover:text-red-700 font-semibold"
+            >
+                Hapus
+            </button>
+        </div>
     </div>
-  </div>
 );
 
 export default function AdminDashboard() {
   const { userProfile } = useAuth();
   const [loading, setLoading] = useState(true);
   const [jobs, setJobs] = useState([]);
-  const [applicants, setApplicants] = useState([]);
+  const [applicantsToReview, setApplicantsToReview] = useState([]);
   const [view, setView] = useState('list');
-  const [selectedJob, setSelectedJob] = useState(null);
   const [selectedApplicant, setSelectedApplicant] = useState(null);
-  const [jobToEdit, setJobToEdit] = useState(null);
+  const [showManualReview, setShowManualReview] = useState(false);
   const navigate = useNavigate();
 
+  const handleReviewClick = (applicantId) => { 
+    setSelectedApplicant(applicantsToReview.find(app => app.id === applicantId));
+    setShowManualReview(true);
+  };
+  
   const fetchJobs = async () => {
     setLoading(true);
     let query = supabase
@@ -125,73 +69,13 @@ export default function AdminDashboard() {
       console.error('Error fetching jobs:', error);
     } else {
       setJobs(data);
+      const allApplicants = data.flatMap(job => job.applicants || []);
+      const toReview = allApplicants.filter(app => app.status === 'Assessment - Needs Review');
+      setApplicantsToReview(toReview);
     }
     setLoading(false);
   };
   
-  const fetchApplicants = async (jobId) => {
-    setLoading(true);
-    let query = supabase
-      .from('applicants')
-      .select('*, jobs (title)')
-      .eq('job_id', jobId);
-      
-    if (userProfile?.company) {
-      query = query.eq('company', userProfile.company);
-    }
-
-    const { data, error } = await query;
-
-    if (error) {
-      console.error('Error fetching applicants:', error);
-    } else {
-      setApplicants(data);
-    }
-    setLoading(false);
-  };
-  
-  const handleUpdateApplicantStatus = async (applicantId, newStatus) => {
-    const applicant = applicants.find(app => app.id === applicantId);
-
-    if (newStatus === 'Scheduled for Interview') {
-      setSelectedApplicant(applicant);
-      setView('schedulingForm');
-      return;
-    }
-    
-    const { error } = await supabase
-      .from('applicants')
-      .update({ status: newStatus })
-      .eq('id', applicantId);
-
-    if (error) {
-      alert('Gagal memperbarui status pelamar: ' + error.message);
-    } else {
-      const updatedApplicants = applicants.map(app => 
-        app.id === applicantId ? { ...app, status: newStatus } : app
-      );
-      setApplicants(updatedApplicants);
-      setSelectedApplicant(prev => prev?.id === applicantId ? {...prev, status: newStatus} : prev);
-    }
-  };
-  
-  const handleDownloadFile = async (filePath) => {
-    const { data, error } = await supabase.storage
-      .from('candidate-uploads')
-      .download(filePath);
-      
-    if (error) {
-      alert('Gagal mengunduh file: ' + error.message);
-    } else {
-      const url = URL.createObjectURL(new Blob([data]));
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = filePath.split('/').pop();
-      link.click();
-      URL.revokeObjectURL(url);
-    }
-  };
-
   const handleDeleteJob = async (jobId) => {
     if (window.confirm("Apakah Anda yakin ingin menghapus lowongan ini?")) {
       const { error } = await supabase
@@ -208,20 +92,13 @@ export default function AdminDashboard() {
     }
   };
   
-  const handleSchedulingComplete = () => {
-    setView('list');
-    fetchApplicants(selectedJob.id);
-  };
-  
   const handleOpenJobForm = (job = null) => {
-    setJobToEdit(job);
     navigate('/admin/jobForm', { state: { jobToEdit: job } });
   };
   
-  const handleCloseJobForm = () => {
-    navigate('/admin');
-    setJobToEdit(null);
-    fetchJobs();
+  // Perbaikan di sini: Gunakan `Maps` untuk berpindah halaman
+  const onViewApplicants = (jobId, jobTitle) => {
+    navigate(`/admin/applicants/${jobId}`, { state: { jobTitle } });
   };
 
   useEffect(() => {
@@ -237,87 +114,76 @@ export default function AdminDashboard() {
       </div>
     );
   }
-  
+
   const renderView = () => {
-    if (view === 'jobForm') {
+    if (showManualReview && selectedApplicant) {
       return (
-        <JobFormPage onClose={handleCloseJobForm} onJobAdded={fetchJobs} jobToEdit={jobToEdit} />
-      );
-    } else if (view === 'schedulingForm') {
-      return (
-        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full flex justify-center items-center z-50">
-          <SchedulingForm
-            applicant={selectedApplicant}
-            onClose={() => setView('applicantDetail')}
-            onScheduleComplete={handleSchedulingComplete}
-          />
-        </div>
-      );
-    } else if (view === 'applicantDetail') {
-      return (
-        <ApplicantDetail
-          applicant={selectedApplicant}
-          onBack={() => setView('applicantsList')}
-          onDownloadFile={handleDownloadFile}
-          onUpdateStatus={handleUpdateApplicantStatus}
+        <ManualAssessmentReviewPage 
+          applicantId={selectedApplicant.id} 
+          onBack={() => {
+            setShowManualReview(false);
+            setSelectedApplicant(null);
+          }} 
         />
       );
-    } else if (view === 'applicantsList') {
-      return (
-        <ApplicantsList
-          job={selectedJob}
-          applicants={applicants}
-          onBack={() => setView('list')}
-          onDownloadFile={handleDownloadFile}
-          onUpdateStatus={handleUpdateApplicantStatus}
-          onSelectApplicant={(applicant) => {
-            setSelectedApplicant(applicant);
-            setView('applicantDetail');
-          }}
-        />
-      );
+    } else if (view === 'questionBank') {
+        return <QuestionBankPage onBack={() => setView('list')} />;
     } else {
       return (
         <>
+          {applicantsToReview.length > 0 && (
+            <div className="mb-8">
+              <h3 className="text-xl font-bold text-red-600 mb-4">
+                ⚠️ Pelamar Perlu Ditinjau Secara Manual ({applicantsToReview.length})
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {applicantsToReview.map(applicant => (
+                  <div 
+                    key={applicant.id} 
+                    className="bg-red-50 border-2 border-red-200 p-4 rounded-lg shadow cursor-pointer hover:shadow-lg hover:border-red-300 transition-all duration-200"
+                    onClick={() => handleReviewClick(applicant.id)}
+                  >
+                    <p className="font-semibold text-gray-900">{applicant.name}</p>
+                    <p className="text-sm text-gray-600">Posisi: {applicant.jobs?.title || 'N/A'}</p>
+                    <p className="text-sm text-red-600 mt-2 font-bold">
+                      🔍 Status: Perlu Ditinjau Manual
+                    </p>
+                    <div className="mt-2 text-xs text-red-500 bg-red-100 px-2 py-1 rounded">
+                      Klik untuk meninjau
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           <div className="mt-8 flex justify-between items-center">
             <h3 className="text-2xl font-semibold">Kelola Lowongan</h3>
-            <button
-              onClick={() => handleOpenJobForm()}
-              className="bg-blue-500 text-white font-bold py-2 px-4 rounded-full hover:bg-blue-600 transition-colors duration-200"
-            >
-              + Tambah Lowongan
-            </button>
+            <div className="space-x-2">
+                <button
+                    onClick={() => setView('questionBank')}
+                    className="bg-purple-500 text-white font-bold py-2 px-4 rounded-full hover:bg-purple-600 transition-colors duration-200"
+                >
+                    Bank Soal
+                </button>
+                <button
+                    onClick={() => handleOpenJobForm()}
+                    className="bg-blue-500 text-white font-bold py-2 px-4 rounded-full hover:bg-blue-600 transition-colors duration-200"
+                >
+                    + Tambah Lowongan
+                </button>
+            </div>
           </div>
           <div className="mt-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {jobs.length > 0 ? (
               jobs.map(job => (
-                <div
-                  key={job.id}
-                  className="bg-white rounded-xl shadow-lg p-6 transition-shadow duration-300 border border-gray-200"
-                >
-                  <div className="cursor-pointer" onClick={() => {
-                    setSelectedJob(job);
-                    fetchApplicants(job.id);
-                    setView('applicantsList');
-                  }}>
-                    <h4 className="text-xl font-semibold text-gray-800">{job.title}</h4>
-                    <p className="text-sm text-gray-500 mt-1">{job.company} | {job.location}</p>
-                  </div>
-                  <div className="mt-4 flex space-x-2">
-                    <button
-                      onClick={() => { setJobToEdit(job); handleOpenJobForm(job); }}
-                      className="text-sm text-blue-500 hover:text-blue-700 font-semibold"
-                    >
-                      Edit
-                    </button>
-                    <button
-                      onClick={() => handleDeleteJob(job.id)}
-                      className="text-sm text-red-500 hover:text-red-700 font-semibold"
-                    >
-                      Hapus
-                    </button>
-                  </div>
-                </div>
+                <JobItem
+                    key={job.id}
+                    job={job}
+                    onOpenJobForm={handleOpenJobForm}
+                    onViewApplicants={onViewApplicants}
+                    onDeleteJob={handleDeleteJob}
+                />
               ))
             ) : (
               <p className="col-span-full text-center text-gray-500">Tidak ada lowongan yang tersedia.</p>
