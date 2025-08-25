@@ -106,4 +106,6 @@ grpcio-status==1.71.0
 pdfminer.six==20240706
 gunicorn
 whitenoise
+dj-database-url
+psycopg2-binary
 

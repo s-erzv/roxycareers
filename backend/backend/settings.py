@@ -1,8 +1,15 @@
 from pathlib import Path
 import os
 from dotenv import load_dotenv
+import dj_database_url
 
 BASE_DIR = Path(__file__).resolve().parent.parent
+
+# --------------------------------------------------
+# Load environment variables
+# --------------------------------------------------
+# Memuat file .env dari direktori root proyek
+load_dotenv(os.path.join(BASE_DIR, '.env'))
 
 # --------------------------------------------------
 # Quick-start development settings
@@ -28,7 +35,7 @@ INSTALLED_APPS = [
     "django.contrib.contenttypes",
     "django.contrib.sessions",
     "django.contrib.messages",
-    "whitenoise.runserver_nostatic",   # ⬅️ tambahin ini
+    "whitenoise.runserver_nostatic",
     "django.contrib.staticfiles",
 
     "corsheaders",
@@ -37,7 +44,7 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
-    "whitenoise.middleware.WhiteNoiseMiddleware",  # ⬅️ tambahin ini
+    "whitenoise.middleware.WhiteNoiseMiddleware",
     "corsheaders.middleware.CorsMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
@@ -69,11 +76,10 @@ WSGI_APPLICATION = "backend.wsgi.application"
 # --------------------------------------------------
 # Database
 # --------------------------------------------------
+DATABASE_URL = os.environ.get("DATABASE_URL")
+
 DATABASES = {
-    "default": {
-        "ENGINE": "django.db.backends.sqlite3",
-        "NAME": BASE_DIR / "db.sqlite3",
-    }
+    "default": dj_database_url.parse(DATABASE_URL)
 }
 
 # --------------------------------------------------
@@ -104,9 +110,8 @@ STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 # --------------------------------------------------
-# Load environment for Supabase, etc.
+# Supabase environment variables
 # --------------------------------------------------
-load_dotenv()
 SUPABASE_URL = os.environ.get("SUPABASE_URL")
 SUPABASE_KEY = os.environ.get("SUPABASE_SERVICE_KEY") or os.environ.get(
     "SUPABASE_ANON_KEY"
