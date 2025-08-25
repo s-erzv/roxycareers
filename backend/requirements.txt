@@ -1,4 +1,8 @@
+<<<<<<< HEAD
 annotated-types==3.2.0
+=======
+annotated-types==3.1.0
+>>>>>>> 1025118 (add vercel json)
 anyio==4.4.0
 beautifulsoup4==4.13.0
 blis==0.7.12
