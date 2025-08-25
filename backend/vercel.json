@@ -2,17 +2,14 @@
   "version": 2,
   "builds": [
     {
-      "src": "backend/wsgi.py",
-      "use": "@vercel/python",
-      "config": {
-        "runtime": "python3.12"
-      }
+      "src": "backend/manage.py",
+      "use": "@vercel/python"
     }
   ],
   "routes": [
     {
       "src": "/(.*)",
-      "dest": "backend/wsgi.py"
+      "dest": "backend/manage.py"
     }
   ]
 }

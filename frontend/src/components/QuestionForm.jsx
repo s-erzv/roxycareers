@@ -27,7 +27,7 @@ export default function QuestionForm({ jobId, onQuestionAdded }) {
     e.preventDefault();
     try {
       // Pastikan URL dan endpoint sesuai dengan konfigurasi backend Anda
-      const response = await fetch(`http://localhost:8000/api/jobs/${jobId}/questions/`, {
+      const response = await fetch(`https://roxycareers-production.up.railway.app/api/jobs/${jobId}/questions/`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(question)

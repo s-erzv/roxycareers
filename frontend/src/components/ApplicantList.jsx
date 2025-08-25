@@ -75,7 +75,7 @@ export default function ApplicantsList() {
 
     const handleRescreeningAndRefresh = async (applicantId) => {
         try {
-            const response = await fetch('http://localhost:8000/api/rescreen-applicant', {
+            const response = await fetch('https://roxycareers-production.up.railway.app/api/rescreen-applicant', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ applicant_id: applicantId }),

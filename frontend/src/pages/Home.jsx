@@ -278,7 +278,7 @@ const JobDetail = ({ job, onBack }) => {
         };
 
         // 6) Kirim ke API
-        const res = await fetch("http://localhost:8000/api/apply", {
+        const res = await fetch("https://roxycareers-production.up.railway.app/api/apply", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload),

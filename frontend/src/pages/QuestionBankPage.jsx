@@ -20,7 +20,7 @@ export default function QuestionBankPage({ onBack }) {
 
     const fetchTemplates = async () => {
         try {
-            const res = await axios.get('http://127.0.0.1:8000/api/assessment-templates/');
+            const res = await axios.get('https://roxycareers-production.up.railway.app/api/assessment-templates/');
             setTemplates(res.data);
         } catch (error) {
             console.error("Failed to fetch templates:", error);
@@ -29,7 +29,7 @@ export default function QuestionBankPage({ onBack }) {
 
     const fetchQuestions = async () => {
         try {
-            const res = await axios.get('http://127.0.0.1:8000/api/question-bank/');
+            const res = await axios.get('https://roxycareers-production.up.railway.app/api/question-bank/');
             setQuestions(res.data);
         } catch (error) {
             console.error("Failed to fetch questions:", error);
@@ -38,7 +38,7 @@ export default function QuestionBankPage({ onBack }) {
     
     const handleCreateTemplate = async () => {
         try {
-            await axios.post('http://127.0.0.1:8000/api/assessment-templates/', { name: newTemplateName });
+            await axios.post('https://roxycareers-production.up.railway.app/api/assessment-templates/', { name: newTemplateName });
             fetchTemplates();
             setNewTemplateName('');
         } catch (error) {
@@ -48,7 +48,7 @@ export default function QuestionBankPage({ onBack }) {
     
     const handleCreateQuestion = async () => {
         try {
-            await axios.post('http://127.0.0.1:8000/api/question-bank/', newQuestion);
+            await axios.post('https://roxycareers-production.up.railway.app/api/question-bank/', newQuestion);
             fetchQuestions();
             setNewQuestion({ text: '', question_type: 'ESSAY', options: [], solution: '' });
         } catch (error) {
@@ -58,7 +58,7 @@ export default function QuestionBankPage({ onBack }) {
 
     const handleAddQuestionToTemplate = async (templateId, questionId) => {
         try {
-            await axios.post(`http://127.0.0.1:8000/api/assessment-templates/${templateId}/questions/`, { question_id: questionId });
+            await axios.post(`https://roxycareers-production.up.railway.app/api/assessment-templates/${templateId}/questions/`, { question_id: questionId });
             alert('Pertanyaan berhasil ditambahkan ke template!');
         } catch (error) {
             console.error("Failed to add question to template:", error);

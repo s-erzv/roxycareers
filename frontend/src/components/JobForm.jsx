@@ -43,7 +43,7 @@ export default function JobForm({ onClose, onJobAdded, jobToEdit }) {
   useEffect(() => {
     const fetchTemplates = async () => {
         try {
-            const res = await axios.get('http://127.0.0.1:8000/api/assessment-templates/');
+            const res = await axios.get('https://roxycareers-production.up.railway.app/api/assessment-templates/');
             setTemplates(res.data);
         } catch (error) {
             console.error("Failed to fetch templates:", error);
@@ -153,7 +153,7 @@ export default function JobForm({ onClose, onJobAdded, jobToEdit }) {
   const handleAutoSchedule = async (jobId) => {
     setSchedulingStatus('loading');
     try {
-      const response = await axios.post(`http://127.0.0.1:8000/api/jobs/${jobId}/schedule/`);
+      const response = await axios.post(`https://roxycareers-production.up.railway.app/api/jobs/${jobId}/schedule/`);
       console.log("Scheduling response:", response.data);
       setSchedulingStatus('success');
     } catch (error) {
@@ -180,7 +180,7 @@ export default function JobForm({ onClose, onJobAdded, jobToEdit }) {
         // 1. Buat pertanyaan kustom di bank soal terlebih dahulu dan kumpulkan ID-nya
         const customQuestionIds = [];
         for (const q of customQuestions) {
-            const res = await axios.post('http://127.0.0.1:8000/api/question-bank/', q);
+            const res = await axios.post('https://roxycareers-production.up.railway.app/api/question-bank/', q);
             customQuestionIds.push(res.data.id);
         }
 
@@ -234,7 +234,7 @@ export default function JobForm({ onClose, onJobAdded, jobToEdit }) {
 
         // 4. Hubungkan pekerjaan dengan pertanyaan kustom yang baru dibuat
         for (const questionId of customQuestionIds) {
-            await axios.post(`http://127.0.0.1:8000/api/jobs/${jobId}/add-custom-question/`, {
+            await axios.post(`https://roxycareers-production.up.railway.app/api/jobs/${jobId}/add-custom-question/`, {
               question_id: questionId,
             });
           }

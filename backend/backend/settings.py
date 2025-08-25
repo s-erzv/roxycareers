@@ -116,7 +116,7 @@ USE_I18N = True
 
 USE_TZ = True
 
-CORS_ALLOW_ALL_ORIGINS = True
+ALLOWED_HOSTS = ["roxycareers-production.up.railway.app", "localhost", "127.0.0.1"]
 
 
 # Static files (CSS, JavaScript, Images)
