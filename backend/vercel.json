@@ -2,16 +2,7 @@
   "version": 2,
   "builds": [
     {
-      "src": "frontend/package.json",
-      "use": "@vercel/static-build",
-      "config": {
-        "installCommand": "npm ci",
-        "buildCommand": "npm run build",
-        "outputDirectory": "frontend/dist"
-      }
-    },
-    {
-      "src": "backend/backend/wsgi.py",
+      "src": "backend/wsgi.py",
       "use": "@vercel/python",
       "config": {
         "runtime": "python3.12"
@@ -20,12 +11,8 @@
   ],
   "routes": [
     {
-      "src": "/api/(.*)",
-      "dest": "backend/backend/wsgi.py"
-    },
-    {
       "src": "/(.*)",
-      "dest": "frontend/dist/$1"
+      "dest": "backend/wsgi.py"
     }
   ]
 }
