@@ -209,13 +209,11 @@ export default function JobForm({ onClose, onJobAdded, jobToEdit }) {
 
           schedule_start_date: formData.schedule_start_date || null, // YYYY-MM-DD
           schedule_end_date: formData.schedule_end_date || null,
-          daily_start_time: formData.daily_start_time 
-            ? formData.daily_start_time + ":00"
-            : null,
-          daily_end_time: formData.daily_end_time 
-            ? formData.daily_end_time + ":00"
-            : null,
+          daily_start_time: formData.daily_start_time || null, // Perbaiki: Hapus penambahan ":00"
+          daily_end_time: formData.daily_end_time || null, // Perbaiki: Hapus penambahan ":00"
         };
+
+        console.log('Data to be saved:', dataToSave);
 
 
         // 3. Simpan atau perbarui pekerjaan utama

@@ -61,7 +61,6 @@ pydantic-core
 Pygments
 PyJWT
 pyparsing
-PyPDF2
 pypdfium2
 python-dateutil
 python-docx
@@ -72,7 +71,7 @@ regex
 requests
 rich
 rsa
-scikit-learn
+scikit-learn==1.6.1
 scipy
 setuptools
 shellingham
