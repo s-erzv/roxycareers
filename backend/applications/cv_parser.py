@@ -1,5 +1,3 @@
-# applications/cv_parser.py
-import PyPDF2
 from docx import Document
 import spacy
 import re
@@ -7,6 +5,7 @@ import io
 import json
 import os
 import pdfplumber
+import pypdf
 
 # Tentukan jalur file JSON secara relatif
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -38,60 +37,68 @@ except FileNotFoundError:
 def extract_text_from_pdf(pdf_file_bytes):
     text = ""
     try:
-        # Coba menggunakan PyPDF2
-        pdf_file = io.BytesIO(pdf_file_bytes)
-        reader = PyPDF2.PdfReader(pdf_file)
+        # Coba menggunakan pypdf
+        reader = pypdf.PdfReader(io.BytesIO(pdf_file_bytes))
         for page in reader.pages:
-            text += page.extract_text()
-        if text:
-            print("[EXTRACTOR] Berhasil mengekstrak teks menggunakan PyPDF2.")
-            return text
+            text += page.extract_text() or ""
     except Exception as e:
-        print(f"[EXTRACTOR] Peringatan: Gagal membaca PDF dengan PyPDF2. Mencoba pdfplumber. {e}")
-    
-    # Jika PyPDF2 gagal, coba menggunakan pdfplumber
-    try:
-        pdf_file = io.BytesIO(pdf_file_bytes)
-        with pdfplumber.open(pdf_file) as pdf:
-            for page in pdf.pages:
-                text += page.extract_text()
-        if text:
-            print("[EXTRACTOR] Berhasil mengekstrak teks menggunakan pdfplumber.")
-            return text
-    except Exception as e:
-        print(f"[EXTRACTOR] Gagal membaca PDF dengan pdfplumber. {e}")
-        return None
-    
-    return None
+        print(f"Error extracting text with pypdf: {e}")
+        # Jika pypdf gagal, coba dengan pdfplumber
+        try:
+            with pdfplumber.open(io.BytesIO(pdf_file_bytes)) as pdf:
+                for page in pdf.pages:
+                    text += page.extract_text() or ""
+        except Exception as e:
+            print(f"Error extracting text with pdfplumber: {e}")
+            return None
+    return text
 
 def extract_text_from_docx(docx_file_bytes):
-    text = ""
     try:
-        docx_file = io.BytesIO(docx_file_bytes)
-        doc = Document(docx_file)
-        for paragraph in doc.paragraphs:
-            text += paragraph.text + '\n'
+        doc = Document(io.BytesIO(docx_file_bytes))
+        text = " ".join([para.text for para in doc.paragraphs])
+        return text
     except Exception as e:
-        print(f"Error reading DOCX: {e}")
+        print(f"Error extracting text from docx: {e}")
         return None
-    return text
 
 def parse_cv_text(text):
     if not text:
-        return {}
+        return None
+
     doc = nlp(text)
-    
     parsed_data = {
-        "education": None,
-        "experience_years": 0,
-        "location": None,
-        "skills": [],
-        "projects_count": 0,
-        "certifications": []
+        'name': '',
+        'email': '',
+        'phone_number': '',
+        'skills': [],
+        'experience_years': 0,
+        'education': '',
+        'location': '',
+        'certifications': [],
+        'projects_count': 0
     }
-    
-    # Ekstraksi Pengalaman Kerja
-    experience_pattern = re.compile(r'(\d+)\s+(tahun|year)s?\s+experience', re.IGNORECASE)
+
+    # Ekstraksi Nama (menggunakan NER untuk nama orang)
+    for ent in doc.ents:
+        if ent.label_ == "PERSON":
+            parsed_data['name'] = ent.text
+            break
+
+    # Ekstraksi Email
+    email_pattern = re.compile(r'[\w\.-]+@[\w\.-]+\.\w+')
+    email_match = email_pattern.search(text)
+    if email_match:
+        parsed_data['email'] = email_match.group(0)
+
+    # Ekstraksi Nomor Telepon
+    phone_pattern = re.compile(r'(\+\d{1,3}\s?)?(\d{3,4}[\s-]?\d{3,4}[\s-]?\d{4})')
+    phone_match = phone_pattern.search(text)
+    if phone_match:
+        parsed_data['phone_number'] = phone_match.group(0)
+
+    # Ekstraksi Tahun Pengalaman
+    experience_pattern = re.compile(r'(\d+)\s+(tahun|year)s?\\s+experience|experience\\s+of\\s+(\\d+)\\s+(year|tahun)s?|\\b(\\d+)\\s+(tahun|year|thn)\\b')
     experience_match = experience_pattern.search(text)
     if experience_match:
         parsed_data['experience_years'] = int(experience_match.group(1))
@@ -128,5 +135,5 @@ def parse_cv_text(text):
         if re.search(r'\b' + keyword + r'\b', text, re.IGNORECASE):
             found_certifications.add(keyword)
     parsed_data['certifications'] = list(found_certifications)
-    
+
     return parsed_data
