@@ -48,6 +48,7 @@ packaging
 pandas
 pdfplumber
 pillow
+pypdf
 postgrest
 preshed
 proto-plus
@@ -103,9 +104,7 @@ websockets
 wrapt
 grpcio==1.71.0
 grpcio-status==1.71.0
-pdfminer.six==20240706
 gunicorn
 whitenoise
 dj-database-url
 psycopg2-binary
-
