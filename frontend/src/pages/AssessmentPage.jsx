@@ -19,17 +19,18 @@ const AssessmentPage = ({ applicant, onBack }) => {
     const fetchQuestions = async () => {
       try {
         setLoading(true);
-        const jobId = applicant.jobs.id;
-        if (!jobId) {
-          throw new Error("Job ID is missing.");
+        // Perbaikan di sini: Tambahkan pemeriksaan
+        if (!applicant || !applicant.jobs || !applicant.jobs.id) {
+          throw new Error("Applicant data or Job ID is missing.");
         }
+        const jobId = applicant.jobs.id;
 
         const response = await axios.get(`${import.meta.env.VITE_BACKEND_URL}/api/jobs/${jobId}/assessment-questions/`, {
           headers: {
             'Authorization': `Bearer ${session.access_token}`
           }
         });
-        
+
         if (response.data.questions && Array.isArray(response.data.questions)) {
           setQuestions(response.data.questions);
         } else {
@@ -38,21 +39,21 @@ const AssessmentPage = ({ applicant, onBack }) => {
 
         const duration = response.data.duration;
         if (typeof duration === 'number' && !isNaN(duration)) {
-          setInitialDuration(duration * 60);
+          setInitialDuration(duration * 60); // Konversi ke detik
         } else {
-          setInitialDuration(60 * 60); // Default to 60 minutes
+          setInitialDuration(0);
         }
-        
-        setLoading(false);
-      } catch (err) {
-        console.error("Failed to fetch questions:", err);
-        setError("Failed to load assessment questions. Please try again later.");
+      } catch (error) {
+        console.error("Failed to fetch questions:", error);
+        setError(error.message);
+      } finally {
         setLoading(false);
       }
     };
 
     fetchQuestions();
-  }, [applicant, session]);
+  }, [applicant, session]); 
+
 
   useEffect(() => {
     if (initialDuration === null) return;
