@@ -47,35 +47,44 @@ export default function CandidateDashboard() {
       if (applicantsError) {
         setError('Gagal memuat aplikasi: ' + applicantsError.message);
         console.error('Error fetching applications:', applicantsError);
-        setLoading(false);
-        return;
+        setApplications([]);
+      } else {
+        const applicantIds = applicants.map(app => app.id);
+        const { data: schedules, error: schedulesError } = await supabase
+          .from('schedules')
+          .select('*')
+          .in('applicant_id', applicantIds);
+
+        if (schedulesError) {
+          console.error('Error fetching schedules:', schedulesError);
+        }
+
+        const applicationsWithSchedules = applicants.map(app => {
+          const matchingSchedules = schedules ? schedules.filter(s => s.applicant_id === app.id) : [];
+          return {
+            ...app,
+            schedules: matchingSchedules,
+            isAssessment: app.jobs.recruitment_process_type === 'online_assessment' || app.jobs.recruitment_process_type === 'assessment_and_interview'
+          };
+        });
+
+        setApplications(applicationsWithSchedules);
+        setError(null);
       }
-
-      const applicantIds = applicants.map(app => app.id);
-      const { data: schedules, error: schedulesError } = await supabase
-        .from('schedules')
-        .select('*')
-        .in('applicant_id', applicantIds);
-
-      if (schedulesError) {
-        console.error('Error fetching schedules:', schedulesError);
-      }
-
-      const applicationsWithSchedules = applicants.map(app => {
-        const matchingSchedules = schedules.filter(s => s.applicant_id === app.id);
-        return {
-          ...app,
-          schedules: matchingSchedules
-        };
-      });
-
-      setApplications(applicationsWithSchedules);
       setLoading(false);
     };
 
     fetchApplicationsAndSchedules();
   }, [session]);
 
+  const handleSelectApplication = (application) => {
+    setSelectedApplication(application);
+  };
+
+  const handleBackToApplications = () => {
+    setSelectedApplication(null);
+  };
+  
   const getStatusTextAndColor = (status) => {
     const normalizedStatus = status ? status.toLowerCase() : '';
 
@@ -104,104 +113,96 @@ export default function CandidateDashboard() {
         return { text: 'Status Tidak Diketahui', color: 'bg-gray-100 text-gray-800' };
     }
   };
+
+  const renderContent = () => {
+    if (loading) {
+      return (
+        <div className="flex justify-center items-center h-screen bg-gray-100">
+          <p>Memuat status aplikasi...</p>
+        </div>
+      );
+    }
+
+    if (error) {
+      return (
+        <div className="flex justify-center items-center h-screen bg-gray-100">
+          <p className="text-red-500">{error}</p>
+        </div>
+      );
+    }
+    
+    if (selectedApplication) {
+      if (selectedApplication.isAssessment) {
+        return <AssessmentPage applicant={selectedApplication} onBack={handleBackToApplications} />;
+      } else {
+        return <ApplicationDetail application={selectedApplication} onBack={handleBackToApplications} />;
+      }
+    }
+
+    return (
+      <div className="p-8">
+        <h2 className="text-3xl font-bold text-gray-900 mb-6">Status Aplikasi Anda</h2>
+        {applications.length > 0 ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {applications.map(app => {
+              let currentStatus = app.status;
+              const interviewTime = app.schedules && app.schedules.length > 0 ? new Date(app.schedules[0].interview_time) : null;
+              
+              if (currentStatus === 'scheduled' && interviewTime && (new Date().getTime() > (interviewTime.getTime() + 60 * 60 * 1000))) {
+                currentStatus = 'Interviewed';
+              }
+
+              const statusDisplay = getStatusTextAndColor(currentStatus);
+              const formattedDate = interviewTime ? interviewTime.toLocaleDateString('en-US') : '';
+              const formattedTime = interviewTime ? interviewTime.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) : '';
+              const isAssessmentAvailable = app.status === 'Shortlisted' || app.status === 'Applied';
+
+              return (
+                <div 
+                  key={app.id} 
+                  onClick={() => {
+                    if (isAssessmentAvailable) {
+                      setSelectedApplication({ ...app, isAssessment: true });
+                    } else {
+                      setSelectedApplication(app);
+                    }
+                  }}
+                  className="bg-white rounded-xl shadow-lg p-6 border border-gray-200 cursor-pointer hover:shadow-xl transition-shadow duration-300"
+                >
+                  <h3 className="text-xl font-semibold text-gray-800">{app.jobs.title}</h3>
+                  <p className="text-sm text-gray-500 mt-1">Perusahaan: {app.jobs.company}</p>
+                  <div className="mt-4 flex items-center">
+                    <span className={`px-3 py-1 rounded-full text-sm font-semibold ${statusDisplay.color}`}>
+                      {statusDisplay.text}
+                    </span>
+                    {app.status === 'scheduled' && interviewTime && (
+                      <span className="ml-4 text-sm text-gray-600">
+                        Jadwal: {formattedDate}, {formattedTime} WIB
+                      </span>
+                    )}
+                    {isAssessmentAvailable && (
+                       <span className="ml-4 text-sm text-teal-600 font-semibold">
+                         Asesmen Tersedia
+                       </span>
+                    )}
+                    <span className="text-xs text-gray-400 ml-auto">
+                      Melamar pada: {new Date(app.created_at).toLocaleDateString()}
+                    </span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <p className="text-center text-gray-500">Anda belum melamar pekerjaan apa pun.</p>
+        )}
+      </div>
+    );
+  };
   
   return (
     <div className="p-8">
-      {selectedApplication ? (
-        selectedApplication.isAssessment ? (
-          <AssessmentPage
-            application={selectedApplication}
-            onBack={() => setSelectedApplication(null)}
-          />
-        ) : (
-          <ApplicationDetail
-            application={selectedApplication}
-            onBack={() => setSelectedApplication(null)}
-          />
-        )
-      ) : (
-        // Render dashboard utama atau pesan 'loading'
-        <div>
-          <h2 className="text-3xl font-bold text-gray-800 mb-6">Aplikasi Saya</h2>
-          {/* Tambahkan logika loading dan list aplikasi di sini */}
-        </div>
-      )}
-    </div>
-  );
-
-  if (loading) {
-    return (
-      <div className="flex justify-center items-center h-screen bg-gray-100">
-        <p>Memuat status aplikasi...</p>
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="flex justify-center items-center h-screen bg-gray-100">
-        <p className="text-red-500">{error}</p>
-      </div>
-    );
-  }
-
-  return (
-    <div className="p-8">
-      <h2 className="text-3xl font-bold text-gray-900 mb-6">Status Aplikasi Anda</h2>
-      {applications.length > 0 ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {applications.map(app => {
-            let currentStatus = app.status;
-            const interviewTime = app.schedules && app.schedules.length > 0 ? new Date(app.schedules[0].interview_time) : null;
-            
-            if (currentStatus === 'scheduled' && interviewTime && (new Date().getTime() > (interviewTime.getTime() + 60 * 60 * 1000))) {
-              currentStatus = 'Interviewed';
-            }
-
-            const statusDisplay = getStatusTextAndColor(currentStatus);
-            const formattedDate = interviewTime ? interviewTime.toLocaleDateString('en-US') : '';
-            const formattedTime = interviewTime ? interviewTime.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) : '';
-            const isAssessmentAvailable = app.status === 'Shortlisted' || app.status === 'Applied';
-
-            return (
-              <div 
-                key={app.id} 
-                onClick={() => {
-                  if (isAssessmentAvailable) {
-                    setSelectedApplication({ ...app, isAssessment: true });
-                  } else {
-                    setSelectedApplication(app);
-                  }
-                }}
-                className="bg-white rounded-xl shadow-lg p-6 border border-gray-200 cursor-pointer hover:shadow-xl transition-shadow duration-300"
-              >
-                <h3 className="text-xl font-semibold text-gray-800">{app.jobs.title}</h3>
-                <p className="text-sm text-gray-500 mt-1">Perusahaan: {app.jobs.company}</p>
-                <div className="mt-4 flex items-center">
-                  <span className={`px-3 py-1 rounded-full text-sm font-semibold ${statusDisplay.color}`}>
-                    {statusDisplay.text}
-                  </span>
-                  {app.status === 'scheduled' && interviewTime && (
-                    <span className="ml-4 text-sm text-gray-600">
-                      Jadwal: {formattedDate}, {formattedTime} WIB
-                    </span>
-                  )}
-                  {isAssessmentAvailable && (
-                     <span className="ml-4 text-sm text-teal-600 font-semibold">
-                       Asesmen Tersedia
-                     </span>
-                  )}
-                  <span className="text-xs text-gray-400 ml-auto">
-                    Melamar pada: {new Date(app.created_at).toLocaleDateString()}
-                  </span>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      ) : (
-        <p className="text-center text-gray-500">Anda belum melamar pekerjaan apa pun.</p>
-      )}
+      {renderContent()}
     </div>
   );
 }
