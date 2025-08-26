@@ -22,9 +22,17 @@ DEBUG = os.environ.get("DJANGO_DEBUG", "false").lower() == "true"
 ALLOWED_HOSTS = [
     "localhost",
     "127.0.0.1",
-    "*.up.railway.app",  # domain Railway
+    "roxycareers-production.up.railway.app",
+    "roxycareers.up.railway.app",
+    ".up.railway.app", 
 ]
 
+CSRF_TRUSTED_ORIGINS = [
+    "https://roxycareers.up.railway.app",
+]
+
+SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+USE_X_FORWARDED_HOST = True
 
 # --------------------------------------------------
 # CORS
