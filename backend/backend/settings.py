@@ -22,8 +22,17 @@ DEBUG = os.environ.get("DJANGO_DEBUG", "false").lower() == "true"
 ALLOWED_HOSTS = [
     "localhost",
     "127.0.0.1",
-    "roxycareers-production.up.railway.app",  # domain Railway
+    "*.up.railway.app",  # domain Railway
 ]
+
+
+# --------------------------------------------------
+# CORS
+# --------------------------------------------------
+CORS_ALLOWED_ORIGINS = [
+    "https://roxycareers.up.railway.app",  
+]
+
 
 # --------------------------------------------------
 # Application definition
