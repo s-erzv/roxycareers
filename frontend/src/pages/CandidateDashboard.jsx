@@ -105,17 +105,29 @@ export default function CandidateDashboard() {
     }
   };
   
-  if (selectedApplication) {
-    if (selectedApplication.isAssessment) {
-      return (
-        <AssessmentPage
-          application={selectedApplication}
-          onBack={() => setSelectedApplication(null)}
-        />
-      );
-    }
-    return <ApplicationDetail application={selectedApplication} onBack={() => setSelectedApplication(null)} />;
-  }
+  return (
+    <div className="p-8">
+      {selectedApplication ? (
+        selectedApplication.isAssessment ? (
+          <AssessmentPage
+            application={selectedApplication}
+            onBack={() => setSelectedApplication(null)}
+          />
+        ) : (
+          <ApplicationDetail
+            application={selectedApplication}
+            onBack={() => setSelectedApplication(null)}
+          />
+        )
+      ) : (
+        // Render dashboard utama atau pesan 'loading'
+        <div>
+          <h2 className="text-3xl font-bold text-gray-800 mb-6">Aplikasi Saya</h2>
+          {/* Tambahkan logika loading dan list aplikasi di sini */}
+        </div>
+      )}
+    </div>
+  );
 
   if (loading) {
     return (
